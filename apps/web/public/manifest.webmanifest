@@ -1,0 +1,9 @@
+{
+  "name": "Focus Realm CRM",
+  "short_name": "FR CRM",
+  "start_url": "/phone",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#1a6ae0",
+  "icons": [{ "src": "/brand/focus-realm-mark.png", "sizes": "600x600", "type": "image/png", "purpose": "any" }]
+}

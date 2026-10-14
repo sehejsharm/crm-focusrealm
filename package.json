@@ -1,0 +1,24 @@
+{
+  "name": "focus-realm-crm",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Focus Realm Sales CRM & AI Call Intelligence",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "build:vercel": "npm run build -w apps/api && npm run build -w apps/web",
+    "start": "npm run start -w apps/api",
+    "seed": "npm run seed -w apps/api",
+    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
+    "test": "npm run test -w apps/api",
+    "postinstall": "node apps/api/build.mjs"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

@@ -1,0 +1,257 @@
+@import "tailwindcss";
+
+/* Dark mode follows the .dark class on <html> (light blue & white is the default). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Focus Realm brand blues — the same scale as the HR console & Workspace. */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dcebfe;
+  --color-brand-200: #bfdcfe;
+  --color-brand-300: #92c5fd;
+  --color-brand-400: #5aa7f8;
+  --color-brand-500: #2f86f0;
+  --color-brand-600: #1a6ae0;
+  --color-brand-700: #1655c0;
+  --color-brand-800: #18479b;
+  --color-brand-900: #193d7a;
+  --color-brand-950: #12264a;
+  --color-brand-ink: #071630;
+  --color-sky: #7cc0fa;
+
+  /* Semantic surfaces, driven by the variables below. */
+  --color-bg: var(--bg);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-accent: var(--brand);
+  --color-accent-soft: var(--brand-soft);
+  --color-accent-soft-fg: var(--brand-soft-fg);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --shadow-xs: var(--sh-xs);
+  --shadow-sm: var(--sh-sm);
+  --shadow-md: var(--sh-md);
+  --shadow-lg: var(--sh-lg);
+  --shadow-brand: var(--sh-brand);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+  --animate-aurora: aurora 18s ease-in-out infinite alternate;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-spin-slow: spin 14s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.2s var(--ease-out-expo) infinite;
+  --animate-beam: beam 6s linear infinite;
+  --animate-gradient: gradient-pan 8s ease infinite;
+
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  @keyframes aurora {
+    0% { transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1); }
+    50% { transform: translate3d(5%, 6%, 0) rotate(12deg) scale(1.08); }
+    100% { transform: translate3d(-3%, 3%, 0) rotate(-8deg) scale(0.96); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.7; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  @keyframes beam {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+  }
+  @keyframes gradient-pan {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --bg-subtle: #eef2f8;
+  --surface: #ffffff;
+  --surface-2: #ffffff;
+  --surface-hover: #f3f6fb;
+  --surface-sunken: #f1f4f9;
+  --line: #e3e8f0;
+  --line-strong: #cfd7e3;
+  --fg: #0a1426;
+  --fg-muted: #4b5a72;
+  --fg-subtle: #8492a7;
+  --brand: #1a6ae0;
+  --brand-soft: #eaf3ff;
+  --brand-soft-fg: #1655c0;
+  --success: #0f9d6b;
+  --success-soft: #e7f7f0;
+  --warning: #c27a06;
+  --warning-soft: #fdf4e3;
+  --danger: #d93a4a;
+  --danger-soft: #fdecee;
+  --info: #0e8ac7;
+  --info-soft: #e6f5fc;
+  --sh-xs: 0 1px 2px rgba(10, 20, 38, 0.05);
+  --sh-sm: 0 1px 2px rgba(10, 20, 38, 0.04), 0 2px 8px -2px rgba(10, 20, 38, 0.06);
+  --sh-md: 0 2px 4px -1px rgba(10, 20, 38, 0.05), 0 10px 28px -8px rgba(10, 20, 38, 0.12);
+  --sh-lg: 0 8px 16px -6px rgba(10, 20, 38, 0.08), 0 24px 56px -12px rgba(10, 20, 38, 0.2);
+  --sh-brand: 0 10px 30px -10px rgba(26, 106, 224, 0.6);
+  --glass: rgba(255, 255, 255, 0.72);
+  --grid: rgba(26, 106, 224, 0.07);
+  --spot: rgba(47, 134, 240, 0.1);
+  /* Chart series: same brand hue, two validated steps (CVD ΔE ≥ 17, ≥3:1 on surface). */
+  --series-1: #2f86f0;
+  --series-2: #18479b;
+  --chart-grid: #e8edf4;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #060a13;
+  --bg-subtle: #090f1b;
+  --surface: #0c1320;
+  --surface-2: #101929;
+  --surface-hover: #141f33;
+  --surface-sunken: #080d17;
+  --line: #1a2539;
+  --line-strong: #26344e;
+  --fg: #e8eef8;
+  --fg-muted: #98a6bd;
+  --fg-subtle: #627089;
+  --brand: #3b8ef5;
+  --brand-soft: rgba(59, 142, 245, 0.14);
+  --brand-soft-fg: #8cc0fb;
+  --success: #2fc58c;
+  --success-soft: rgba(47, 197, 140, 0.12);
+  --warning: #f0a72e;
+  --warning-soft: rgba(240, 167, 46, 0.12);
+  --danger: #f2606e;
+  --danger-soft: rgba(242, 96, 110, 0.12);
+  --info: #38b6f0;
+  --info-soft: rgba(56, 182, 240, 0.12);
+  --sh-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 10px -2px rgba(0, 0, 0, 0.45);
+  --sh-md: 0 2px 6px -1px rgba(0, 0, 0, 0.45), 0 14px 32px -10px rgba(0, 0, 0, 0.6);
+  --sh-lg: 0 10px 22px -6px rgba(0, 0, 0, 0.55), 0 28px 64px -12px rgba(0, 0, 0, 0.7);
+  --sh-brand: 0 10px 34px -10px rgba(59, 142, 245, 0.75);
+  --glass: rgba(12, 19, 32, 0.72);
+  --grid: rgba(90, 167, 248, 0.06);
+  --spot: rgba(59, 142, 245, 0.14);
+  --series-1: #5aa7f8;
+  --series-2: #1a6ae0;
+  --chart-grid: #172235;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(47, 134, 240, 0.25);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* View-transition circle reveal when switching theme. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+@layer components {
+  .glass {
+    background: var(--glass);
+    backdrop-filter: saturate(160%) blur(18px);
+    -webkit-backdrop-filter: saturate(160%) blur(18px);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+  .grid-fade {
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-sunken) 0%, var(--surface-hover) 40%, var(--surface-sunken) 80%);
+    background-size: 800px 100%;
+    animation: var(--animate-shimmer);
+  }
+  .text-gradient {
+    background: linear-gradient(110deg, #1655c0 0%, #2f86f0 35%, #7cc0fa 55%, #1a6ae0 80%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: var(--animate-gradient);
+  }
+  .dark .text-gradient {
+    background-image: linear-gradient(110deg, #8cc0fb 0%, #5aa7f8 35%, #dcebfe 55%, #3b8ef5 80%);
+  }
+  .noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .scroll-x-fade {
+    mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+  }
+}
+
+/* A utility (not a component class) so it works with focus:/focus-visible: variants. */
+@utility ring-focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(26, 106, 224, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
