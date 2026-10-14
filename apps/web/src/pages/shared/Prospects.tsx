@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Contact as ContactIcon, Plus, Search, UploadCloud, Users } from "lucide-react";
+import { Contact as ContactIcon, Download, Plus, Search, UploadCloud, Users } from "lucide-react";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CallButton } from "../../components/call";
@@ -36,7 +36,7 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
   const [campaign, setCampaign] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [sort, setSort] = useState("recent");
-  const [view, setView] = useState<"all" | "due" | "hot" | "unassigned">("all");
+  const [view, setView] = useState<"all" | "due" | "hot" | "stale" | "unassigned">(params.get("filter") === "stale" ? "stale" : "all");
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(params.get("import") === "1");
   const [adding, setAdding] = useState(false);
@@ -57,7 +57,7 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
         `/contacts${qs({
           q: debounced, stage, status, campaign, ownerId, page, pageSize: 40,
           sort: view === "hot" ? "temperature" : view === "due" ? "next_action" : sort,
-          due: view === "due" ? "today" : undefined,
+          due: view === "due" ? "today" : view === "stale" ? "stale" : undefined,
           unassigned: view === "unassigned" || undefined,
         })}`,
       ),
@@ -75,7 +75,10 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
         actions={
           <>
             {manager && scope === "all" && (
-              <Button variant="soft" icon={<UploadCloud className="size-4" />} onClick={() => setImporting(true)}>Import CSV</Button>
+              <>
+                <Button variant="ghost" icon={<Download className="size-4" />} onClick={() => window.location.assign("/api/export/prospects.csv")}>Export</Button>
+                <Button variant="soft" icon={<UploadCloud className="size-4" />} onClick={() => setImporting(true)}>Import CSV</Button>
+              </>
             )}
             <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>Add prospect</Button>
           </>
@@ -115,6 +118,7 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
               { value: "all", label: "Everything" },
               { value: "due", label: "Due today" },
               { value: "hot", label: "🔥 Hottest" },
+              { value: "stale", label: "💤 Gone quiet" },
               ...(scope === "all" ? [{ value: "unassigned" as const, label: "Unassigned" }] : []),
             ]}
           />

@@ -1,5 +1,12 @@
 import { db, json, type Queryable } from "../db/index.js";
 import { broadcast, publish } from "./bus.js";
+import { enqueue } from "../services/jobs.js";
+
+/**
+ * Notifications that also go out by email (when SMTP is configured) —
+ * the ones someone should see even if the CRM isn't open.
+ */
+const EMAIL_ALERTS = new Set(["handoff", "escalation", "review", "team", "task", "meeting", "allocation", "closed", "qualified"]);
 
 /** Append to the audit trail. Never throws — auditing must not break an action. */
 export async function audit(
@@ -56,6 +63,9 @@ export async function notify(
     q,
   );
   publish(userId, { type: "notification", data: row });
+  if (!q && EMAIL_ALERTS.has(kind)) {
+    await enqueue("notification.email", { id: row.id }, { maxAttempts: 3 }).catch(() => {});
+  }
   return row;
 }
 

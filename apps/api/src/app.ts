@@ -11,7 +11,9 @@ import { errorHandler } from "./lib/http.js";
 import { api } from "./routes/api.js";
 import { authRouter } from "./routes/auth.js";
 import { events } from "./routes/events.js";
+import { exportsRouter } from "./routes/exports.js";
 import { integrations } from "./routes/integrations.js";
+import { emailNotification } from "./services/alerts.js";
 import { analyzeCall } from "./services/analysis.js";
 import { fetchProviderRecording } from "./services/calls.js";
 import { registerJob } from "./services/jobs.js";
@@ -43,6 +45,7 @@ export function ensureReady() {
     registerJob("call.analyze", async (p) => void (await analyzeCall(p.callId)));
     registerJob("report.build", async (p) => void (await buildReport(p.userId, p.date, { email: p.email, queuedAt: p.queuedAt })));
     registerJob("report.email", (p) => emailReport(p.reportId));
+    registerJob("notification.email", (p) => emailNotification(p.id));
   })().catch((e) => {
     ready = null; // let the next request retry instead of caching the failure
     throw e;
@@ -99,7 +102,7 @@ export function createApp() {
     if (req.user && env.serverless) background(opportunisticMaintenance());
     next();
   });
-  app.use("/api", requireAuth, events, api);
+  app.use("/api", requireAuth, events, exportsRouter, api);
   app.use("/api", (_req, res) => res.status(404).json({ error: "Not found" }));
 
   // Self-hosted: the API also serves the built web app. (On Vercel the CDN does.)

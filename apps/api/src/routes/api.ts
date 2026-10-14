@@ -118,7 +118,7 @@ api.get("/contacts", async (req, res) => {
       campaign: z.string().optional(),
       segment: z.string().optional(),
       unassigned: z.coerce.boolean().optional(),
-      due: z.enum(["today", "overdue"]).optional(),
+      due: z.enum(["today", "overdue", "stale"]).optional(),
       sort: z.enum(["recent", "name", "next_action", "temperature"]).optional(),
     }),
     req.query,

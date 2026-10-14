@@ -199,7 +199,7 @@ export function heuristicDailyReport(input: {
     grade: analysed.length ? grade : "C",
     overall_score: avg,
     executive_summary: analysed.length
-      ? `${first} made ${m.calls_total} calls (${m.connect_rate}% connect rate) with ${Math.round((m.talk_time_sec ?? 0) / 60)} minutes of talk time. ${analysed.length} recorded calls were analysed with an average score of ${avg}/100. ${best ? `The strongest call was ${best.call_code}. ` : ""}Main area to work on: ${improvements[0]?.issue?.toLowerCase() ?? "maintaining consistency"}.`
+      ? `${first} made ${m.calls_total} calls (${m.connect_rate}% connect rate) with ${Math.round((m.talk_time_sec ?? 0) / 60)} minutes of talk time. ${analysed.length} recorded calls were analysed with an average score of ${avg}/100. ${best ? `The strongest call was ${best.call_code}. ` : ""}Main area to work on: ${(improvements[0]?.issue ?? "maintaining consistency").toLowerCase().replace(/\.$/, "")}.`
       : `${first} logged ${m.calls_total} calls but no recordings were available to analyse. Make sure recordings are attached after each call.`,
     wins: [
       ...(m.meetings_booked ? [`Booked ${m.meetings_booked} Legion meeting${m.meetings_booked > 1 ? "s" : ""}.`] : []),

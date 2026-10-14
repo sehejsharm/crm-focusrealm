@@ -8,6 +8,8 @@ import { runDailyReports } from "./reports.js";
 import { getSetting } from "./settings.js";
 import { storage } from "./storage.js";
 import { escalateOverdue, sendDueReminders } from "./tasks.js";
+import { STALE_SQL } from "./contacts.js";
+import { notify } from "../lib/record.js";
 
 /**
  * Time-based work: task reminders every minute, overdue escalation, the
@@ -45,6 +47,19 @@ export async function maybeRunDailyReports(opts: { ignoreTime?: boolean } = {}) 
   return runDailyReports(today);
 }
 
+/** Once a day: tell each salesperson how many of their prospects have gone stale. */
+async function staleNudges() {
+  const { staleDays } = await getSetting("allocation");
+  const rows = await db.many<{ owner_id: string; n: number }>(
+    `select c.owner_id, count(*)::int as n from crm_contacts c where ${STALE_SQL.replace("$STALE", "$1")} group by c.owner_id`,
+    [staleDays],
+  );
+  for (const r of rows) {
+    await notify(r.owner_id, "stale", `${r.n} prospect${r.n === 1 ? " has" : "s have"} gone quiet`, `No touch in ${staleDays}+ days and nothing scheduled. Give them a call or a next step.`, "/sales/prospects?filter=stale");
+  }
+  return rows.length;
+}
+
 async function retention() {
   const t = await getSetting("telephony");
   if (!t.retentionDays) return 0;
@@ -69,6 +84,7 @@ export async function runMaintenance() {
   if (st.lastRetention !== today) {
     removed = await retention();
     await pruneEvents();
+    await staleNudges();
     await saveState({ lastRetention: today });
   }
   return { reminders, escalated, report, recordingsRemoved: removed };
@@ -107,5 +123,9 @@ export function startScheduler() {
   });
   cron.schedule("30 3 * * *", () => {
     retention().catch((e) => console.error("[scheduler] retention", e));
+    pruneEvents().catch(() => {});
+  }, { timezone: env.timezone });
+  cron.schedule("15 9 * * 1-6", () => {
+    staleNudges().catch((e) => console.error("[scheduler] stale", e));
   }, { timezone: env.timezone });
 }

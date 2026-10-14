@@ -66,7 +66,7 @@ export default function Command() {
         <Stat label="Decision-maker reach" value={pct(r.decision_maker_reached, r.analysed)} suffix="%" icon={<Target className="size-4" />} foot={`of ${r.analysed ?? 0} analysed calls`} delay={0.1} />
         <Stat label="Meetings booked · 30d" value={r.meetings} icon={<Rocket className="size-4" />} accent delay={0.15} spark={(d?.series ?? []).map((s: any) => s.meetings)} />
         <Stat label="Follow-up compliance" value={pct(fc.done, fc.done + fc.missed)} suffix="%" icon={<CheckCircle2 className="size-4" />} foot={`${fc.missed} missed`} delay={0.2} />
-        <Stat label="Overdue follow-ups" value={d?.overdue} icon={<AlarmClock className="size-4" />} delay={0.25} />
+        <Stat label="Overdue follow-ups" value={d?.overdue} icon={<AlarmClock className="size-4" />} foot={d ? `${d.stale} stale leads (no touch in ${d.staleDays}+ days)` : undefined} delay={0.25} />
         <Stat label="Unassigned prospects" value={d?.unassigned} icon={<UserX className="size-4" />} foot={<Link to="/founder/allocation" className="font-semibold text-accent hover:underline">Allocate →</Link>} delay={0.3} />
         <Stat label="Handoffs waiting" value={d?.handoffsPending} icon={<Inbox className="size-4" />} foot={<Link to="/founder/legion" className="font-semibold text-accent hover:underline">Legion →</Link>} delay={0.35} />
       </div>

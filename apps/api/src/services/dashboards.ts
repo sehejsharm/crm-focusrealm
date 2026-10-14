@@ -3,6 +3,8 @@ import type { AuthUser } from "../lib/auth.js";
 import { addDays, dayBounds, todayLocal } from "../lib/time.js";
 import { ACTIVE_STATUSES } from "./allocation.js";
 import { CONNECTED } from "./calls.js";
+import { STALE_SQL } from "./contacts.js";
+import { getSetting } from "./settings.js";
 
 const connectedList = `(${CONNECTED.map((c) => `'${c}'`).join(",")})`;
 
@@ -184,6 +186,8 @@ export async function founderDashboard() {
     ),
     db.one(`select count(*)::int as n from crm_handoffs where status = 'pending'`),
   ]);
+  const { staleDays } = await getSetting("allocation");
+  const stale = await db.one<{ n: number }>(`select count(*)::int as n from crm_contacts c where ${STALE_SQL.replace("$STALE", "$1")}`, [staleDays]);
   const followUpCompliance = await db.one(
     `select count(*) filter (where status = 'done')::int as done, count(*) filter (where status = 'missed')::int as missed
      from crm_tasks where due_at >= $1 and due_at < now()`,
@@ -192,7 +196,7 @@ export async function founderDashboard() {
   return {
     funnel, statusCounts, byCampaign, bySegment, byRep, overdue: overdue.n, unassigned: unassigned.n,
     objectionTrend, productFeedback, frameworkAvg, rates, followUpCompliance, jobs, meetingsUpcoming,
-    handoffsPending: handoffsPending.n, series: await dailySeries(null, 30),
+    handoffsPending: handoffsPending.n, stale: stale.n, staleDays, series: await dailySeries(null, 30),
   };
 }
 

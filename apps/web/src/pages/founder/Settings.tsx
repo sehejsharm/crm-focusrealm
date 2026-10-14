@@ -173,7 +173,7 @@ function CallingSettings({ value }: { value: any }) {
       </Card>
       <Card spotlight={false}>
         <CardHeader title="Recording notice & retention" icon={<ClipboardCheck className="size-4" />} />
-        <Row title="Announce recording" body="Bridge calls play the notice; Phone Link shows it to the rep to read out."><Switch checked={v.consentNotice} onChange={(x) => setV({ ...v, consentNotice: x })} /></Row>
+        <Row title="Recording notice" body="Twilio bridge calls play it automatically; with Phone Link and Exotel it's shown to the salesperson to read out at the start."><Switch checked={v.consentNotice} onChange={(x) => setV({ ...v, consentNotice: x })} /></Row>
         <div className="border-t border-line px-5 py-4"><Field label="Notice text"><Textarea value={v.consentText} onChange={(e) => setV({ ...v, consentText: e.target.value })} className="min-h-16" /></Field></div>
         <Row title="Keep recordings for (days)" body="Older recordings are deleted nightly. 0 keeps them forever."><Input type="number" min={0} value={v.retentionDays} onChange={(e) => setV({ ...v, retentionDays: Number(e.target.value) })} className="w-28" /></Row>
         <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} onClick={() => save.mutate(v)}>Save calling settings</Button></div>

@@ -1,11 +1,11 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { Bot, PhoneCall } from "lucide-react";
+import { Bot, Download, PhoneCall } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Avatar, Badge, Button, Card, Empty, PageHeader, Select, Skeleton } from "../../components/ui";
 import { api, qs } from "../../lib/api";
-import { useAuth } from "../../lib/auth";
+import { useAuth, useIsManager } from "../../lib/auth";
 import { duration, fmtDateTime, label, OUTCOME_TONE, OUTCOMES, scoreTone, todayISO } from "../../lib/format";
 import type { Call } from "../../lib/types";
 
@@ -15,6 +15,7 @@ const ANALYSIS_TONE: Record<string, "success" | "warning" | "brand" | "neutral" 
 
 export default function Calls() {
   const { user } = useAuth();
+  const manager = useIsManager();
   const base = `/${user?.portal}`;
   const [outcome, setOutcome] = useState("");
   const [analysis, setAnalysis] = useState("");
@@ -33,7 +34,12 @@ export default function Calls() {
 
   return (
     <div>
-      <PageHeader eyebrow="Calls" title={user?.role === "sales_rep" ? "My calls" : "All calls"} subtitle={`${(q.data?.total ?? 0).toLocaleString("en-IN")} calls · every one with a unique call ID`} />
+      <PageHeader
+        eyebrow="Calls"
+        title={user?.role === "sales_rep" ? "My calls" : "All calls"}
+        subtitle={`${(q.data?.total ?? 0).toLocaleString("en-IN")} calls · every one with a unique call ID`}
+        actions={manager && <Button variant="ghost" icon={<Download className="size-4" />} onClick={() => window.location.assign(`/api/export/calls.csv${qs({ from: from ?? new Date(Date.now() - 30 * 86400_000).toISOString(), to })}`)}>Export CSV</Button>}
+      />
       <Card className="mb-4 flex flex-wrap gap-2 p-3" spotlight={false}>
         <Select value={outcome} onChange={(e) => { setOutcome(e.target.value); setPage(1); }} className="w-auto min-w-40">
           <option value="">All outcomes</option>

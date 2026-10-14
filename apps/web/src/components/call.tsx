@@ -296,7 +296,8 @@ export function WrapUp({ call, target, onClose }: { call: Call | null; target: C
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Later</Button>
-          <Button variant="primary" disabled={!outcome} loading={save.isPending} onClick={() => save.mutate()} icon={<Check className="size-4" />}>
+          {needsNext && !nextAt && <span className="mr-auto text-xs font-medium text-warning">Pick when you'll follow up</span>}
+          <Button variant="primary" disabled={!outcome || Boolean(needsNext && !nextAt)} loading={save.isPending} onClick={() => save.mutate()} icon={<Check className="size-4" />}>
             Save call
           </Button>
         </>
@@ -335,7 +336,7 @@ export function WrapUp({ call, target, onClose }: { call: Call | null; target: C
         <AnimatePresence>
           {needsNext && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <p className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-fg"><CalendarClock className="size-4 text-accent" /> Next action</p>
+              <p className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-fg"><CalendarClock className="size-4 text-accent" /> Next action <span className="font-normal text-muted">— required, so no promising lead goes quiet</span></p>
               <div className="flex flex-wrap gap-2">
                 {QUICK.map((q) => {
                   const v = localInput(q.at());

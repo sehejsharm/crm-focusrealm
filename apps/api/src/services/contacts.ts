@@ -26,6 +26,15 @@ const MANUAL_TRANSITIONS: Record<string, Status[]> = {
   disqualified: ["outreach"],
 };
 
+/**
+ * A stale lead: still being worked, no open next action, and nobody has
+ * touched it for the configured number of days (proposal §9C).
+ */
+export const STALE_SQL = `c.owner_id is not null and c.status in ('new','outreach','follow_up','qualification_review','returned')
+  and not c.do_not_contact
+  and not exists (select 1 from crm_tasks t where t.contact_id = c.id and t.status = 'open')
+  and coalesce(c.last_contacted_at, c.created_at) < now() - make_interval(days => $STALE::int)`;
+
 export const CONTACT_SELECT = `
   c.*, co.name as company_name, co.industry as company_industry, co.city as company_city, co.website as company_website,
   o.full_name as owner_name, o.avatar_hue as owner_hue, o.employee_code as owner_code,
@@ -70,7 +79,7 @@ export interface ListFilters {
   campaign?: string;
   segment?: string;
   unassigned?: boolean;
-  due?: "today" | "overdue";
+  due?: "today" | "overdue" | "stale";
   sort?: "recent" | "name" | "next_action" | "temperature";
   page: number;
   pageSize: number;
@@ -98,6 +107,11 @@ export async function listContacts(user: AuthUser, f: ListFilters) {
   if (f.unassigned) where.push("c.owner_id is null");
   if (f.due === "today") where.push(`exists (select 1 from crm_tasks t where t.contact_id = c.id and t.status = 'open' and t.due_at < date_trunc('day', now()) + interval '1 day')`);
   if (f.due === "overdue") where.push(`exists (select 1 from crm_tasks t where t.contact_id = c.id and t.status = 'open' and t.due_at < now())`);
+  if (f.due === "stale") {
+    const { staleDays } = await getSetting("allocation");
+    params.push(staleDays);
+    where.push(`${STALE_SQL.replace("$STALE", `$${params.length}`)}`);
+  }
 
   const order = {
     recent: "c.updated_at desc",

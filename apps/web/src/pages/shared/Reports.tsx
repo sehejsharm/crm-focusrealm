@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { CalendarDays, FileText, Mail, MailCheck, Play, Users } from "lucide-react";
+import { CalendarDays, Download, FileText, Mail, MailCheck, Play, Users } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useToast } from "../../components/toast";
@@ -64,6 +64,7 @@ export default function Reports() {
               <CalendarDays className="size-4 text-muted" />
               <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className="bg-transparent text-sm text-fg outline-none" />
             </div>
+            {manager && <Button variant="ghost" icon={<Download className="size-4" />} onClick={() => window.location.assign("/api/export/reports.csv")}>Export</Button>}
             {manager && <Button variant="primary" icon={<Play className="size-4" />} loading={run.isPending} onClick={() => run.mutate()}>Run now</Button>}
           </>
         }

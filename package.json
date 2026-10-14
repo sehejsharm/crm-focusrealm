@@ -13,10 +13,11 @@
     "build": "npm run build -w apps/api && npm run build -w apps/web",
     "build:vercel": "npm run build -w apps/api && npm run build -w apps/web",
     "start": "npm run start -w apps/api",
-    "seed": "npm run seed -w apps/api",
+    "seed": "npm run seed -w apps/api --",
     "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
     "test": "npm run test -w apps/api",
-    "postinstall": "node apps/api/build.mjs"
+    "postinstall": "node apps/api/build.mjs",
+    "create-user": "npm run create-user -w apps/api --"
   },
   "engines": {
     "node": ">=20.11"
