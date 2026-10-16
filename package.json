@@ -17,7 +17,8 @@
     "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
     "test": "npm run test -w apps/api",
     "postinstall": "node apps/api/build.mjs",
-    "create-user": "npm run create-user -w apps/api --"
+    "create-user": "npm run create-user -w apps/api --",
+    "copy-recordings-to-r2": "npm run copy-recordings-to-r2 -w apps/api --"
   },
   "engines": {
     "node": ">=20.11"

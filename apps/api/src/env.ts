@@ -40,6 +40,19 @@ const isProd = str("NODE_ENV") === "production";
 /** Running as a Vercel serverless function (no long-lived process). */
 const serverless = Boolean(process.env.VERCEL);
 
+// Cloudflare R2 (S3-compatible). The endpoint is derived from the account ID
+// unless given — set R2_ENDPOINT for an EU-jurisdiction bucket
+// (https://<account>.eu.r2.cloudflarestorage.com).
+const r2AccountId = str("R2_ACCOUNT_ID");
+const r2 = {
+  accountId: r2AccountId,
+  accessKeyId: str("R2_ACCESS_KEY_ID"),
+  secretAccessKey: str("R2_SECRET_ACCESS_KEY"),
+  bucket: str("R2_BUCKET", "crm-call-recordings"),
+  endpoint: str("R2_ENDPOINT", r2AccountId ? `https://${r2AccountId}.r2.cloudflarestorage.com` : "").replace(/\/$/, ""),
+};
+const r2Configured = Boolean(r2.endpoint && r2.accessKeyId && r2.secretAccessKey);
+
 export const env = {
   isProd,
   serverless,
@@ -63,12 +76,15 @@ export const env = {
   /** Shows the one-click demo logins on the sign-in page. */
   demoLogins: bool("DEMO_LOGINS", !isProd),
 
-  // Recordings: "local" (./.data/recordings) or "supabase" (private bucket).
-  storageDriver: str("STORAGE_DRIVER", str("SUPABASE_URL") ? "supabase" : "local") as "local" | "supabase",
+  // Recordings: "r2" (private Cloudflare R2 bucket — the main store in
+  // production), "supabase" (private Supabase Storage bucket) or "local"
+  // (./.data/recordings). Picked automatically from what's configured.
+  storageDriver: str("STORAGE_DRIVER", r2Configured ? "r2" : str("SUPABASE_URL") ? "supabase" : "local") as "local" | "supabase" | "r2",
   localStorageDir: str("LOCAL_STORAGE_DIR", path.join(root, ".data", "recordings")),
   supabaseUrl: str("SUPABASE_URL").replace(/\/$/, ""),
   supabaseServiceRoleKey: str("SUPABASE_SERVICE_ROLE_KEY"),
   recordingsBucket: str("SUPABASE_RECORDINGS_BUCKET", "crm-call-recordings"),
+  r2,
 
   // Call intelligence.
   anthropicConfigured: Boolean(str("ANTHROPIC_API_KEY") || str("ANTHROPIC_AUTH_TOKEN")),
@@ -124,6 +140,11 @@ export function assertProductionConfig() {
   // Serverless file systems are temporary: the embedded database can't be used there.
   if (!env.databaseUrl) missing.push("DATABASE_URL (Supabase Postgres connection string)");
   if (env.storageDriver === "supabase" && !env.supabaseServiceRoleKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (env.storageDriver === "r2") {
+    if (!env.r2.endpoint) missing.push("R2_ACCOUNT_ID (or R2_ENDPOINT)");
+    if (!env.r2.accessKeyId) missing.push("R2_ACCESS_KEY_ID");
+    if (!env.r2.secretAccessKey) missing.push("R2_SECRET_ACCESS_KEY");
+  }
   if (missing.length) {
     throw new Error(`Refusing to start in production without: ${missing.join(", ")}`);
   }

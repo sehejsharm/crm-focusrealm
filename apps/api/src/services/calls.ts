@@ -278,10 +278,10 @@ export async function attachRecording(user: AuthUser, id: string, file: { buffer
 }
 
 /**
- * Where the browser should send a recording. With Supabase Storage it goes
- * straight there through a one-time signed URL — no size limit from the API
- * (Vercel functions accept at most 4.5 MB per request). Otherwise it's
- * posted to the API.
+ * Where the browser should send a recording. With cloud storage (Cloudflare
+ * R2 or Supabase) it goes straight there through a short-lived signed URL —
+ * no size limit from the API (Vercel functions accept at most 4.5 MB per
+ * request). Otherwise it's posted to the API.
  */
 export async function recordingUploadTarget(user: AuthUser, id: string, mimeIn: string) {
   const call = await getCall(id);
@@ -290,7 +290,8 @@ export async function recordingUploadTarget(user: AuthUser, id: string, mimeIn: 
   if (!storage.direct) return { mode: "api" as const, url: `/api/calls/${id}/recording` };
   const key = recordingKey(call.call_code, mime);
   try {
-    return { mode: "direct" as const, url: await storage.uploadUrl(key), key, mime };
+    const target = await storage.uploadUrl(key);
+    return { mode: "direct" as const, url: target.url, headers: target.headers, key, mime };
   } catch (e) {
     throw new HttpError(502, (e as Error).message);
   }
