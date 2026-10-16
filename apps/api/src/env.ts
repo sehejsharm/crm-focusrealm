@@ -122,6 +122,12 @@ export const env = {
   mailFrom: str("MAIL_FROM", "Focus Realm CRM <crm@focusrealm.com>"),
   outboxDir: str("OUTBOX_DIR", path.join(root, ".data", "outbox")),
 
+  /**
+   * One-time code for creating the first founder from the sign-in page on a
+   * CRM with no founders yet. Useless once a founder exists.
+   */
+  setupCode: str("SETUP_CODE"),
+
   // HR console integration. The same value as CRM secret on the HR side.
   hrWebhookSecret: str("HR_WEBHOOK_SECRET"),
 

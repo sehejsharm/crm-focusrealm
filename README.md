@@ -28,6 +28,16 @@ Plus **Phone Link** (`/phone`) — a mobile screen for each salesperson's phone
 (add it to the home screen). Pressing **Call** in the CRM sends the number to
 it: tap to dial, then attach the recording.
 
+## Who signs in how
+
+| Who | Login ID | Where the login comes from |
+|---|---|---|
+| **Sales team & sales heads** | FR number from Workspace | automatic from the **HR console** when they join sales |
+| **Founders** | FR number from Workspace | the first founder sets up on the sign-in page with `SETUP_CODE`; they add the others in **People & Access** |
+| **Legion** | `LG-0001`… (never on Workspace) | a founder adds them in **People & Access**; the CRM assigns the LG ID |
+
+Email works as a login too. Details: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md#who-signs-in-how).
+
 ## The sales journey (as specified by the founders)
 
 1. **Import the contact database** — CSV from Excel/Google Sheets, columns

@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { hashPassword, isManager, requireRole, temporaryPassword, USER_COLUMNS } from "../lib/auth.js";
+import { hashPassword, isManager, nextLoginId, requireRole, temporaryPassword, USER_COLUMNS } from "../lib/auth.js";
 import { badRequest, forbidden, notFound, parse, zId, zIsoDate, zPage } from "../lib/http.js";
 import { phoneKey } from "../lib/phone.js";
 import { audit } from "../lib/record.js";
@@ -46,7 +46,9 @@ api.post("/users", founder, async (req, res) => {
   const body = parse(
     z.object({
       full_name: z.string().min(2),
-      employee_code: z.string().min(2).max(20),
+      // Founders, sales heads and the sales team: their FR number from
+      // Workspace. Legion are never on Workspace: left empty, they get LG-####.
+      employee_code: z.string().trim().max(20).optional().nullable(),
       email: z.string().email().optional().nullable(),
       phone: z.string().optional().nullable(),
       role: z.enum(["founder", "sales_head", "sales_rep", "legion"]),
@@ -55,15 +57,25 @@ api.post("/users", founder, async (req, res) => {
     }),
     req.body,
   );
+  let code = body.employee_code?.toUpperCase() ?? "";
+  if (!code) {
+    if (body.role !== "legion") throw badRequest("Enter their FR number from Focus Realm Workspace — it's their login");
+    code = await nextLoginId("LG");
+  } else if (code.length < 2) {
+    throw badRequest("That login ID is too short");
+  }
+  if (await db.maybe(`select 1 from crm_users where upper(employee_code) = $1`, [code])) {
+    throw badRequest(`${code} is already someone's login`);
+  }
   const pw = temporaryPassword();
   const pk = phoneKey(body.phone);
   const u = await db.one(
     `insert into crm_users (employee_code, email, full_name, phone, role, title, password_hash, must_change_password, source, daily_call_target, avatar_hue)
-     values (upper($1), $2, $3, $4, $5, $6, $7, true, 'manual', $8, $9) returning ${USER_COLUMNS}`,
-    [body.employee_code, body.email ?? null, body.full_name, pk ? `+${pk}` : null, body.role, body.title ?? null, await hashPassword(pw), body.daily_call_target ?? 40, 190 + Math.floor(Math.random() * 50)],
+     values ($1, $2, $3, $4, $5, $6, $7, true, 'manual', $8, $9) returning ${USER_COLUMNS}`,
+    [code, body.email ?? null, body.full_name, pk ? `+${pk}` : null, body.role, body.title ?? null, await hashPassword(pw), body.daily_call_target ?? 40, 190 + Math.floor(Math.random() * 50)],
   );
   await audit({ id: req.user!.id, label: req.user!.full_name }, "user.create", "user", u.id, { role: body.role });
-  res.json({ user: u, temporaryPassword: pw });
+  res.json({ user: u, loginId: u.employee_code, temporaryPassword: pw });
 });
 
 api.patch("/users/:id", manager, async (req, res) => {

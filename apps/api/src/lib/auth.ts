@@ -61,6 +61,19 @@ export function temporaryPassword(): string {
   return `${words[a]}-${words[b]}-${randomInt(1000, 10000)}`;
 }
 
+/**
+ * The next free login ID in a CRM-issued series, e.g. LG-0001 for Legion
+ * (never on Workspace) or FRS-0001 for an HR hire without a Workspace ID.
+ */
+export async function nextLoginId(prefix: "LG" | "FRS") {
+  const r = await db.one<{ n: number }>(
+    `select coalesce(max(nullif(regexp_replace(employee_code, '\\D', '', 'g'), '')::int), 0) + 1 as n
+     from crm_users where employee_code like $1`,
+    [`${prefix}-%`],
+  );
+  return `${prefix}-${String(r.n).padStart(4, "0")}`;
+}
+
 export function signSession(user: Pick<AuthUser, "id" | "token_version">) {
   return jwt.sign({ sub: user.id, tv: user.token_version }, env.jwtSecret, {
     expiresIn: `${SESSION_HOURS}h`,

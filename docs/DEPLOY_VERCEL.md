@@ -68,26 +68,49 @@ prompt doc).
    | `DEEPGRAM_API_KEY` | for transcripts | otherwise recordings are stored but not transcribed |
    | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | for report emails | e.g. your SpaceMail mailbox |
    | `TELEPHONY_PROVIDER` + Exotel/Twilio keys, `TELEPHONY_WEBHOOK_TOKEN` | for bridge calling | see `.env.example` |
+   | `SETUP_CODE` | for first setup | lets the first founder create their login on the sign-in page; useless once a founder exists |
    | `SEED_DEMO`, `DEMO_LOGINS` | optional | `true` to try it with demo data — turn off before real use |
 
    See [`.env.example`](../.env.example) for every variable.
 3. **Deploy.** Open the site. With `SEED_DEMO=true` you'll see one-tap demo
-   logins; otherwise create the first founder account (below).
+   logins; otherwise the sign-in page offers first-time setup for the first
+   founder (below).
+
+### Who signs in how
+
+| Who | Login ID | Where the login comes from |
+|---|---|---|
+| **First founder** | their FR number from Workspace | first-time setup on the sign-in page (below) |
+| **Other founders** (COO…) | their FR number from Workspace | a founder adds them in **People & Access** |
+| **Legion** | `LG-0001`, `LG-0002`… (they're never on Workspace) | a founder adds them in **People & Access**, and the CRM assigns the LG ID |
+| **Sales team & sales heads** | their FR number from Workspace | automatic from the HR console when they join sales |
+
+Everyone can also sign in with their email instead of the ID. People added in
+People & Access get a one-time password, shown once to the founder who added
+them, and they choose their own password when they first sign in.
 
 ### First founder account (no demo data)
 
-From your laptop, point the CRM at the production database once and create
-yourself:
+1. In Vercel, add `SETUP_CODE` (any long random text, e.g.
+   `openssl rand -hex 16`) and redeploy.
+2. Open the CRM. While there's no founder yet, the sign-in page shows
+   **Set up the CRM**: enter the setup code, your FR number from Workspace,
+   your name, email and a password. You're signed straight into the Founders
+   portal.
+3. In **People & Access**, add the other founders (with their FR numbers) and
+   the Legion team (leave the login ID empty; they get `LG-0001`…).
+
+Once a founder exists, the setup page disappears and the code does nothing.
+You can remove `SETUP_CODE` afterwards.
+
+Prefer the terminal? This does the same from your laptop and prints a
+temporary password once:
 
 ```bash
 DATABASE_URL="<the Supabase connection string>" npm run create-user -- \
   --id FR-0001 --name "Your Name" --email you@focusrealm.com \
   --role founder --title "Co-founder & CEO"
 ```
-
-It prints a temporary password once. Sign in with `FR-0001` and that password;
-you'll choose your own. Add the COO, sales heads and Legion from **People &
-Access**; sales team members arrive from the HR console.
 
 ## 4. How the background work runs on Vercel
 
