@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { db, json } from "../db/index.js";
 import { env } from "../env.js";
-import { hashPassword, temporaryPassword, type Role } from "../lib/auth.js";
+import { hashPassword, nextLoginId, temporaryPassword, type Role } from "../lib/auth.js";
 import { badRequest, HttpError } from "../lib/http.js";
 import { phoneKey } from "../lib/phone.js";
 import { audit, notifyRoles } from "../lib/record.js";
@@ -75,14 +75,6 @@ async function roleFor(d: z.infer<typeof EmployeeData>): Promise<Role> {
   const s = await getSetting("hr");
   const title = (d.title ?? "").toLowerCase();
   return s.headKeywords.some((k) => new RegExp(`\\b${k.toLowerCase()}\\b`).test(title)) ? "sales_head" : "sales_rep";
-}
-
-async function nextEmployeeCode() {
-  const r = await db.one<{ n: number }>(
-    `select coalesce(max(nullif(regexp_replace(employee_code, '\\D', '', 'g'), '')::int), 0) + 1 as n
-     from crm_users where employee_code like 'FRS-%'`,
-  );
-  return `FRS-${String(r.n).padStart(4, "0")}`;
 }
 
 function loginPayload(u: { employee_code: string; email: string | null; role: string }) {
@@ -171,9 +163,9 @@ async function apply(ev: z.infer<typeof Event>): Promise<Record<string, unknown>
 }
 
 async function createFromHr(d: z.infer<typeof EmployeeData>, actor: { label: string }) {
-  let code = d.employeeCode?.trim().toUpperCase() || (await nextEmployeeCode());
+  let code = d.employeeCode?.trim().toUpperCase() || (await nextLoginId("FRS"));
   // An employee code already used by someone else in the CRM: fall back to our own series.
-  if (await db.maybe(`select 1 from crm_users where employee_code = $1`, [code])) code = await nextEmployeeCode();
+  if (await db.maybe(`select 1 from crm_users where employee_code = $1`, [code])) code = await nextLoginId("FRS");
   const pw = temporaryPassword();
   const role = await roleFor(d);
   const pk = phoneKey(d.phone);

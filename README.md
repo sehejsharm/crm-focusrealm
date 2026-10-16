@@ -28,6 +28,16 @@ Plus **Phone Link** (`/phone`) — a mobile screen for each salesperson's phone
 (add it to the home screen). Pressing **Call** in the CRM sends the number to
 it: tap to dial, then attach the recording.
 
+## Who signs in how
+
+| Who | Login ID | Where the login comes from |
+|---|---|---|
+| **Sales team & sales heads** | FR number from Workspace | automatic from the **HR console** when they join sales |
+| **Founders** | FR number from Workspace | the first founder sets up on the sign-in page with `SETUP_CODE`; they add the others in **People & Access** |
+| **Legion** | `LG-0001`… (never on Workspace) | a founder adds them in **People & Access**; the CRM assigns the LG ID |
+
+Email works as a login too. Details: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md#who-signs-in-how). Claude in Chrome prompt that sets up the first logins: [docs/LOGIN_SETUP_PROMPT.md](docs/LOGIN_SETUP_PROMPT.md).
+
 ## The sales journey (as specified by the founders)
 
 1. **Import the contact database** — CSV from Excel/Google Sheets, columns
@@ -44,7 +54,7 @@ it: tap to dial, then attach the recording.
    - **Phone Link**: the number appears on their phone to dial on their SIM;
      the recording from the phone's call recorder is attached after; or
    - **Demo**: simulated calls with sample conversations.
-4. **Record** — recordings go to private storage (Supabase), never public.
+4. **Record** — recordings go to a private Cloudflare R2 bucket, never public.
 5. **End of day, AI analyses every recording** (Deepgram transcription with
    speaker labels — Hindi/English mix supported — then Claude): call score,
    ten skills, **SPIN, BANT, MEDDIC, Challenger, Sandler, GAP Selling, NEAT,
@@ -90,10 +100,12 @@ to `./.data/outbox/` so you can open them. Reset the demo with
 
 ## Deploy
 
-**Vercel** (recommended) — one project, Supabase for the database and
-recordings, Vercel Cron for the 20:00 IST report run. Step by step:
-**[docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md)**. All settings:
-**[.env.example](.env.example)**.
+**Vercel** (recommended) — one project, Supabase Postgres for the database,
+**Cloudflare R2** for call recordings, Vercel Cron for the 20:00 IST report
+run. Step by step: **[docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md)**. R2
+setup prompt for Claude in Chrome:
+**[docs/CLOUDFLARE_R2_PROMPT.md](docs/CLOUDFLARE_R2_PROMPT.md)**. All
+settings: **[.env.example](.env.example)**.
 
 Self-hosted: `npm run build && npm start` on any Node 20+ server.
 
@@ -138,8 +150,8 @@ docs/        Deploy guide, HR console contract, prompt and client
   first sign-in, brute-force throttling.
 - Role-based access on every endpoint; salespeople see only their own
   prospects and calls.
-- Recordings in a private bucket, played through 10-minute signed URLs after a
-  permission check; every playback is audited. Retention is configurable
+- Recordings in a private Cloudflare R2 bucket (key scoped to that bucket),
+  played through 10-minute signed URLs after a permission check; every playback is audited. Retention is configurable
   (default 180 days).
 - Recording notice text configurable: Twilio bridge calls play it; Phone Link shows it to the salesperson to read out.
 - Audit log of logins, allocations, reassignments, settings, HR events, report
@@ -156,6 +168,7 @@ docs/        Deploy guide, HR console contract, prompt and client
 | `npm run typecheck` | Type-check API and web |
 | `npm run seed -- --force` | Wipe and re-seed demo data (destroys data!) |
 | `npm run create-user -- --id FR-0001 --name "…" --role founder` | Create a login from the command line |
+| `npm run copy-recordings-to-r2` | One-off copy of existing recordings from Supabase Storage to Cloudflare R2 |
 
 ## Next steps
 

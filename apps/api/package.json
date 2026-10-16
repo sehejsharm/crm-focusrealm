@@ -10,12 +10,14 @@
     "seed": "tsx src/scripts/seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/tests/*.test.ts",
-    "create-user": "tsx src/scripts/create-user.ts"
+    "create-user": "tsx src/scripts/create-user.ts",
+    "copy-recordings-to-r2": "tsx src/scripts/copy-recordings-to-r2.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
     "@electric-sql/pglite": "^0.5.9",
     "@vercel/functions": "^3.10.1",
+    "aws4fetch": "^1.0.20",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.7",

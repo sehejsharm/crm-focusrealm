@@ -140,9 +140,10 @@ export default function Login() {
         </div>
 
         <div className="relative flex flex-1 items-center justify-center px-5 pb-10 sm:px-8">
+          {meta?.setupNeeded ? <FirstFounderSetup enabled={meta.setupEnabled} /> : (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }} className="w-full max-w-[420px]">
             <h2 className="text-[30px] font-bold tracking-tight text-fg">Welcome back</h2>
-            <p className="mt-1 text-sm text-muted">Sign in with your Focus Realm employee ID.</p>
+            <p className="mt-1 text-sm text-muted">Sign in with your Focus Realm login ID.</p>
 
             <div className="mt-7 grid grid-cols-3 gap-1.5 rounded-2xl border border-line bg-sunken p-1.5">
               {PORTALS.map((p) => (
@@ -167,8 +168,9 @@ export default function Login() {
               }}
             >
               <label className="block">
-                <span className="mb-1.5 block text-[13px] font-semibold text-fg">Employee ID</span>
-                <Input icon={<UserRound className="size-4" />} value={login} onChange={(e) => setLogin(e.target.value)} placeholder="FR-0042" autoComplete="username" autoFocus className="h-12 rounded-2xl text-[15px]" />
+                <span className="mb-1.5 block text-[13px] font-semibold text-fg">{portal === "legion" ? "Legion ID" : "FR number"}</span>
+                <Input icon={<UserRound className="size-4" />} value={login} onChange={(e) => setLogin(e.target.value)} placeholder={portal === "legion" ? "LG-0001" : "FR-0042"} autoComplete="username" autoFocus className="h-12 rounded-2xl text-[15px]" />
+                <span className="mt-1.5 block text-xs text-muted">{portal === "legion" ? "The LG ID a founder gave you, or your email." : "Your Focus Realm Workspace ID, or your email."}</span>
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[13px] font-semibold text-fg">Password</span>
@@ -191,7 +193,9 @@ export default function Login() {
               </Button>
             </form>
 
-            <p className="mt-4 text-center text-xs text-muted">New to the sales team? Your login arrives from the HR console when you join.</p>
+            <p className="mt-4 text-center text-xs text-muted">
+              {portal === "sales" ? "New to the sales team? Your login arrives from the HR console when you join." : "No login yet? A founder creates it in People & Access and gives you a one-time password."}
+            </p>
 
             {demo.length > 0 && meta?.demoPassword && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mt-7 rounded-2xl border border-dashed border-brand-300 bg-accent-soft/50 p-4 dark:border-brand-800">
@@ -223,9 +227,88 @@ export default function Login() {
               </motion.div>
             )}
           </motion.div>
+          )}
         </div>
         <p className="relative pb-5 text-center text-[11px] text-subtle">© Focus Realm · Sales CRM & AI Call Intelligence</p>
       </section>
     </div>
+  );
+}
+
+/**
+ * First run, before any founder exists: the first founder creates their own
+ * login with the one-time SETUP_CODE from the CRM's environment variables.
+ */
+function FirstFounderSetup({ enabled }: { enabled: boolean }) {
+  const { setUser } = useAuth();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [f, setF] = useState({ code: "", employee_code: "", full_name: "", email: "", title: "", password: "", confirm: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: k === "employee_code" ? e.target.value.toUpperCase() : e.target.value });
+
+  const submit = async () => {
+    if (f.password !== f.confirm) return setError("The two passwords don't match");
+    setBusy(true);
+    setError(null);
+    try {
+      const { confirm: _c, ...body } = f;
+      const r = await api.post<{ user: User }>("/auth/setup", { ...body, email: body.email || null, title: body.title || null });
+      qc.invalidateQueries({ queryKey: ["meta"] });
+      setUser(r.user);
+      navigate("/founder", { replace: true });
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't reach the CRM — check your connection");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = (label: string, k: keyof typeof f, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    <label className="block">
+      <span className="mb-1.5 block text-[13px] font-semibold text-fg">{label}</span>
+      <Input value={f[k]} onChange={set(k)} className="h-11 rounded-2xl text-[15px]" {...props} />
+    </label>
+  );
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }} className="w-full max-w-[420px]">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent-soft-fg"><Crown className="size-3.5" /> First-time setup</span>
+      <h2 className="mt-3 text-[30px] font-bold tracking-tight text-fg">Set up the CRM</h2>
+      <p className="mt-1 text-sm text-muted">
+        Create the first founder login with your FR number from Workspace. Then add the other founders and Legion in People &amp; Access; the sales team arrives from the HR console.
+      </p>
+      {!enabled ? (
+        <div className="mt-6 rounded-2xl border border-warning/40 bg-warning-soft p-4 text-sm text-fg">
+          <p className="font-semibold">Setup is locked</p>
+          <p className="mt-1 text-muted">
+            Add a <b>SETUP_CODE</b> environment variable to the CRM in Vercel (any long random text), redeploy, then come back here and enter it.
+          </p>
+        </div>
+      ) : (
+        <form className="mt-6 space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          {field("Setup code", "code", { type: "password", autoComplete: "off", placeholder: "SETUP_CODE from Vercel", autoFocus: true })}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {field("FR number", "employee_code", { placeholder: "FR-0001", autoComplete: "username" })}
+            {field("Full name", "full_name", { autoComplete: "name" })}
+            {field("Email", "email", { type: "email", autoComplete: "email", placeholder: "Daily reports go here" })}
+            {field("Title", "title", { placeholder: "Co-founder & CEO" })}
+            {field("Password", "password", { type: "password", autoComplete: "new-password", placeholder: "10+ characters" })}
+            {field("Repeat password", "confirm", { type: "password", autoComplete: "new-password" })}
+          </div>
+          <AnimatePresence>
+            {error && (
+              <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="rounded-xl bg-danger-soft px-3 py-2 text-[13px] font-medium text-danger">
+                {error}
+              </motion.p>
+            )}
+          </AnimatePresence>
+          <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={!f.code || !f.employee_code || !f.full_name || f.password.length < 10 || !f.confirm}>
+            Create founder login <ArrowRight className="size-4" />
+          </Button>
+        </form>
+      )}
+    </motion.div>
   );
 }

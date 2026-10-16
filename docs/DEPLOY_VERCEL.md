@@ -1,14 +1,14 @@
 # Deploying to Vercel
 
 The whole CRM — the web app and the API — deploys as **one Vercel project**
-from this repository. Supabase provides the database and private storage for
-call recordings.
+from this repository. Supabase provides the database; **Cloudflare R2** is the
+private storage for call recordings.
 
 ```
 Browser ──► Vercel CDN (apps/web/dist — the React app)
         └─► /api/*  ──► one Vercel Function (api/index.mjs → Express API)
                           ├─► Supabase Postgres (pooler)
-                          ├─► Supabase Storage (private recordings bucket)
+                          ├─► Cloudflare R2 (private recordings bucket)
                           ├─► Anthropic (Claude) · Deepgram · SMTP · Exotel/Twilio
                           └─◄ HR console (signed events)
 Vercel Cron ──► /api/cron/daily-reports (20:00 IST) · /api/cron/maintenance
@@ -19,20 +19,36 @@ Vercel Cron ──► /api/cron/daily-reports (20:00 IST) · /api/cron/maintenan
 1. Create a project (choose **Mumbai / ap-south-1**, next to your users).
 2. **Database → Connection string → Transaction pooler** (port `6543`). This is
    `DATABASE_URL`. The pooler lets many short-lived functions share Postgres.
-3. **Project Settings → API**: copy the project URL (`SUPABASE_URL`) and the
-   **service role** key (`SUPABASE_SERVICE_ROLE_KEY`). Server-side only.
 
 That's all — tables are created automatically on the first request
 (`supabase/migrations/*.sql`, applied once, safely, even if several functions
 start at the same moment). You can also apply them yourself in the SQL editor.
 Every table has row level security on with no policies, so the anon key can't
-read anything; only the server can. The recordings bucket
-(`crm-call-recordings`, private) is created on the first upload.
+read anything; only the server can.
 
 You can reuse the HR console's Supabase project: all CRM tables are prefixed
 `crm_`, so nothing collides.
 
-## 2. Vercel
+## 2. Cloudflare R2 (recordings)
+
+Follow **[CLOUDFLARE_R2_PROMPT.md](CLOUDFLARE_R2_PROMPT.md)**: paste the
+prompt into Claude in Chrome and it creates the private bucket, a key scoped
+to that bucket only, and the upload (CORS) rule for your CRM domains, then
+saves `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and
+`R2_BUCKET` in Vercel. To do it by hand, follow the same steps in the
+Cloudflare dashboard.
+
+Recordings never go through a public URL. The browser uploads straight to
+R2 with a signed link that is valid for one hour. Playback and transcription
+use signed links that expire after 10 to 30 minutes, and the CRM checks
+permissions before it hands one out.
+
+Supabase Storage still works as an alternative (`SUPABASE_URL` +
+`SUPABASE_SERVICE_ROLE_KEY`, used only when the R2 variables are empty).
+Moving from it to R2? Run `npm run copy-recordings-to-r2` once (see the
+prompt doc).
+
+## 3. Vercel
 
 1. **Add New → Project →** import `crm-focusrealm`. Leave the root directory as
    the repository root. `vercel.json` sets everything else (install, build,
@@ -45,23 +61,53 @@ You can reuse the HR console's Supabase project: all CRM tables are prefixed
    | `DATABASE_URL` | ✅ | Supabase transaction-pooler string |
    | `JWT_SECRET` | ✅ | `openssl rand -hex 32` |
    | `CRON_SECRET` | ✅ | `openssl rand -hex 32` — Vercel Cron sends it automatically |
-   | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | ✅ | for call recordings |
+   | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | ✅ | Cloudflare R2, for call recordings (section 2) |
    | `APP_URL` | recommended | your domain, e.g. `https://crm.focusrealm.com` (defaults to the Vercel production URL) |
    | `HR_WEBHOOK_SECRET` | for HR sync | same value as `FOCUS_REALM_CRM_SECRET` in the HR console |
    | `ANTHROPIC_API_KEY` | for real AI | otherwise demo analysis |
    | `DEEPGRAM_API_KEY` | for transcripts | otherwise recordings are stored but not transcribed |
    | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | for report emails | e.g. your SpaceMail mailbox |
    | `TELEPHONY_PROVIDER` + Exotel/Twilio keys, `TELEPHONY_WEBHOOK_TOKEN` | for bridge calling | see `.env.example` |
+   | `SETUP_CODE` | for first setup | lets the first founder create their login on the sign-in page; useless once a founder exists |
    | `SEED_DEMO`, `DEMO_LOGINS` | optional | `true` to try it with demo data — turn off before real use |
 
    See [`.env.example`](../.env.example) for every variable.
 3. **Deploy.** Open the site. With `SEED_DEMO=true` you'll see one-tap demo
-   logins; otherwise create the first founder account (below).
+   logins; otherwise the sign-in page offers first-time setup for the first
+   founder (below).
+
+### Who signs in how
+
+| Who | Login ID | Where the login comes from |
+|---|---|---|
+| **First founder** | their FR number from Workspace | first-time setup on the sign-in page (below) |
+| **Other founders** (COO…) | their FR number from Workspace | a founder adds them in **People & Access** |
+| **Legion** | `LG-0001`, `LG-0002`… (they're never on Workspace) | a founder adds them in **People & Access**, and the CRM assigns the LG ID |
+| **Sales team & sales heads** | their FR number from Workspace | automatic from the HR console when they join sales |
+
+Everyone can also sign in with their email instead of the ID. People added in
+People & Access get a one-time password, shown once to the founder who added
+them, and they choose their own password when they first sign in.
 
 ### First founder account (no demo data)
 
-From your laptop, point the CRM at the production database once and create
-yourself:
+Easiest: paste [LOGIN_SETUP_PROMPT.md](LOGIN_SETUP_PROMPT.md) into Claude in
+Chrome. It does the steps below and adds the other founders and Legion.
+
+1. In Vercel, add `SETUP_CODE` (any long random text, e.g.
+   `openssl rand -hex 16`) and redeploy.
+2. Open the CRM. While there's no founder yet, the sign-in page shows
+   **Set up the CRM**: enter the setup code, your FR number from Workspace,
+   your name, email and a password. You're signed straight into the Founders
+   portal.
+3. In **People & Access**, add the other founders (with their FR numbers) and
+   the Legion team (leave the login ID empty; they get `LG-0001`…).
+
+Once a founder exists, the setup page disappears and the code does nothing.
+You can remove `SETUP_CODE` afterwards.
+
+Prefer the terminal? This does the same from your laptop and prints a
+temporary password once:
 
 ```bash
 DATABASE_URL="<the Supabase connection string>" npm run create-user -- \
@@ -69,11 +115,7 @@ DATABASE_URL="<the Supabase connection string>" npm run create-user -- \
   --role founder --title "Co-founder & CEO"
 ```
 
-It prints a temporary password once. Sign in with `FR-0001` and that password;
-you'll choose your own. Add the COO, sales heads and Legion from **People &
-Access**; sales team members arrive from the HR console.
-
-## 3. How the background work runs on Vercel
+## 4. How the background work runs on Vercel
 
 Vercel functions don't run between requests, so the CRM is built for that:
 
@@ -93,15 +135,15 @@ Vercel functions don't run between requests, so the CRM is built for that:
 - **Live updates** (dial requests on the Phone Link, call progress,
   notifications) are polled every 1–2.5 seconds from a small events table —
   no long-lived connections, which serverless can't keep open.
-- **Recordings** upload from the browser straight to Supabase Storage through
-  a one-time signed URL (Vercel limits function request bodies to 4.5 MB), and
-  play back through short-lived signed URLs after a permission check.
+- **Recordings** upload from the browser straight to Cloudflare R2 through
+  a signed URL (Vercel limits function request bodies to 4.5 MB), and play
+  back through short-lived signed URLs after a permission check.
 
 Hobby plan notes: daily crons run sometime within their hour, and functions
 can run up to 300 s (Fluid compute). Both are fine for the CRM; Pro gives
 exact cron timing and longer functions.
 
-## 4. Connect the rest
+## 5. Connect the rest
 
 - **HR console**: set `HR_WEBHOOK_SECRET` here and follow
   [`HR_CONSOLE_PROMPT.md`](HR_CONSOLE_PROMPT.md) in the HR console repo.

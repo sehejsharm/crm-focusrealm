@@ -19,6 +19,7 @@ import { fetchProviderRecording } from "./services/calls.js";
 import { registerJob } from "./services/jobs.js";
 import { buildReport, emailReport } from "./services/reports.js";
 import { opportunisticMaintenance } from "./services/scheduler.js";
+import { storageOrigin } from "./services/storage.js";
 import { transcribeCall } from "./services/transcription.js";
 
 let ready: Promise<void> | null = null;
@@ -57,7 +58,7 @@ export function createApp() {
   const app = express();
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
-  const storageOrigin = env.supabaseUrl ? [env.supabaseUrl] : [];
+  const storageOrigins = [storageOrigin()].filter((o): o is string => Boolean(o));
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -67,8 +68,8 @@ export function createApp() {
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
           imgSrc: ["'self'", "data:", "blob:"],
-          mediaSrc: ["'self'", "blob:", ...storageOrigin],
-          connectSrc: ["'self'", ...storageOrigin],
+          mediaSrc: ["'self'", "blob:", ...storageOrigins],
+          connectSrc: ["'self'", ...storageOrigins],
         },
       },
       crossOriginEmbedderPolicy: false,

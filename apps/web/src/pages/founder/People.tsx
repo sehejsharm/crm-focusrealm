@@ -34,7 +34,7 @@ export default function People() {
       <PageHeader
         eyebrow="Admin"
         title="People & access"
-        subtitle="Sales team members arrive automatically from the HR console. Add founders, Legion and anyone else here."
+        subtitle="Sales team members arrive automatically from the HR console. Add founders (with their Workspace FR number) and Legion (they get an LG ID) here."
         actions={<Button variant="primary" icon={<UserPlus className="size-4" />} onClick={() => setAdding(true)}>Add person</Button>}
       />
       <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mb-5 flex items-start gap-3 rounded-2xl border border-brand-200 bg-accent-soft p-4 text-sm dark:border-brand-900">
@@ -76,7 +76,7 @@ export default function People() {
         {secret && (
           <div className="space-y-4">
             <p className="text-sm text-muted">Give these to <b className="text-fg">{secret.name}</b> in person. They'll choose their own password on first sign-in. This password isn't stored anywhere you can see again.</p>
-            <SecretRow label="Employee ID" value={secret.loginId} />
+            <SecretRow label="Login ID" value={secret.loginId} />
             <SecretRow label="Temporary password" value={secret.temporaryPassword} />
           </div>
         )}
@@ -132,8 +132,9 @@ function AddPerson({ open, onClose, onCreated }: { open: boolean; onClose: () =>
   const qc = useQueryClient();
   const toast = useToast();
   const [f, setF] = useState({ full_name: "", employee_code: "", email: "", phone: "", role: "legion", title: "" });
+  const legion = f.role === "legion";
   const save = useMutation({
-    mutationFn: () => api.post<{ user: any; temporaryPassword: string }>("/users", { ...f, email: f.email || null, phone: f.phone || null, title: f.title || null }),
+    mutationFn: () => api.post<{ user: any; temporaryPassword: string }>("/users", { ...f, employee_code: f.employee_code || null, email: f.email || null, phone: f.phone || null, title: f.title || null }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["users"] });
       onClose();
@@ -143,11 +144,13 @@ function AddPerson({ open, onClose, onCreated }: { open: boolean; onClose: () =>
     onError: (e) => toast({ kind: "error", title: "Couldn't add", body: (e as Error).message }),
   });
   return (
-    <Modal open={open} onClose={onClose} title="Add a person" subtitle="Sales team members normally arrive from the HR console." icon={<Plus className="size-5" />} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={save.isPending} disabled={!f.full_name || !f.employee_code} onClick={() => save.mutate()}>Create login</Button></>}>
+    <Modal open={open} onClose={onClose} title="Add a person" subtitle="Sales team members normally arrive from the HR console." icon={<Plus className="size-5" />} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={save.isPending} disabled={!f.full_name || (!legion && !f.employee_code)} onClick={() => save.mutate()}>Create login</Button></>}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Full name"><Input value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></Field>
-        <Field label="Employee ID" hint="Their login, e.g. FR-0050"><Input value={f.employee_code} onChange={(e) => setF({ ...f, employee_code: e.target.value.toUpperCase() })} /></Field>
         <Field label="Role"><Select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}><option value="legion">Legion</option><option value="sales_head">Sales head</option><option value="sales_rep">Sales team member</option><option value="founder">Founder (CEO/COO…)</option></Select></Field>
+        <Field label="Full name"><Input value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></Field>
+        <Field label={legion ? "Login ID (optional)" : "FR number"} hint={legion ? "Legion aren't on Workspace — leave empty to get the next LG ID" : "Their Focus Realm Workspace ID — it's their login"}>
+          <Input value={f.employee_code} onChange={(e) => setF({ ...f, employee_code: e.target.value.toUpperCase() })} placeholder={legion ? "LG-0001 (automatic)" : "FR-0050"} />
+        </Field>
         <Field label="Title"><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Chief Operating Officer" /></Field>
         <Field label="Email" hint="Founders & sales heads receive daily reports here"><Input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         <Field label="Phone"><Input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>

@@ -28,6 +28,10 @@ export interface Meta {
   emailConfigured: boolean;
   storage: string;
   database: string;
+  /** No founder exists yet: the sign-in page shows first-run setup. */
+  setupNeeded: boolean;
+  /** SETUP_CODE is configured on the server. */
+  setupEnabled: boolean;
 }
 
 export type Stage = "prospect" | "qualified" | "legion_meet_1" | "legion_meet_2";

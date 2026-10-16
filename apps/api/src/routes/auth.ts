@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { env } from "../env.js";
@@ -46,6 +47,59 @@ authRouter.post("/login", async (req, res) => {
   await audit({ id: user.id, label: user.full_name }, "auth.login", "user", user.id, { ip: req.ip });
   const { password_hash: _ph, ...safe } = user;
   res.json({ user: present(safe as AuthUser) });
+});
+
+const sameSecret = (a: string, b: string) =>
+  timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
+
+const noFounderYet = async () => !(await db.maybe(`select 1 from crm_users where role = 'founder' limit 1`));
+
+/**
+ * First-run setup: on a CRM with no founder yet, the first founder creates
+ * their own login from the sign-in page with SETUP_CODE (set in Vercel) and
+ * their FR number from Workspace. Everyone else is added from there: other
+ * founders and Legion in People & Access, the sales team by the HR console.
+ */
+authRouter.post("/setup", async (req, res) => {
+  const body = parse(
+    z.object({
+      code: z.string().min(1).max(200),
+      employee_code: z.string().trim().min(2, "Enter your FR number").max(20),
+      full_name: z.string().trim().min(2, "Enter your full name").max(120),
+      email: z.string().trim().email().optional().nullable(),
+      title: z.string().trim().max(120).optional().nullable(),
+      password: z.string().min(10, "Use at least 10 characters").max(200),
+    }),
+    req.body,
+  );
+  if (!env.setupCode) throw new HttpError(403, "Set SETUP_CODE in the CRM's environment variables first, then redeploy");
+  const f = failures.get("setup");
+  if (f && f.n >= 8 && f.until > Date.now()) throw new HttpError(429, "Too many attempts. Try again in a few minutes.");
+  if (!sameSecret(body.code.trim(), env.setupCode)) {
+    failures.set("setup", { n: (f?.until ?? 0) > Date.now() ? f!.n + 1 : 1, until: Date.now() + 15 * 60_000 });
+    throw new HttpError(401, "That setup code isn't right");
+  }
+  failures.delete("setup");
+  const hash = await hashPassword(body.password);
+  const u = await db.tx(async (q) => {
+    // Serialise concurrent attempts so only one first founder can ever exist.
+    if (db.kind === "postgres") await q.query(`select pg_advisory_xact_lock(727275)`);
+    if (await db.maybe(`select 1 from crm_users where role = 'founder' limit 1`, [], q)) {
+      throw new HttpError(409, "The CRM is already set up — sign in, or ask a founder to add you in People & Access");
+    }
+    const code = body.employee_code.toUpperCase();
+    if (await db.maybe(`select 1 from crm_users where upper(employee_code) = $1`, [code], q)) throw badRequest(`${code} is already someone's login`);
+    return db.one<AuthUser>(
+      `insert into crm_users (employee_code, email, full_name, role, title, password_hash, must_change_password, source)
+       values ($1, $2, $3, 'founder', $4, $5, false, 'manual') returning ${USER_COLUMNS}`,
+      [code, body.email || null, body.full_name, body.title || null, hash],
+      q,
+    );
+  });
+  await db.query(`update crm_users set last_login_at = now(), last_active_at = now() where id = $1`, [u.id]);
+  setSessionCookie(res, signSession(u));
+  await audit({ id: u.id, label: u.full_name }, "auth.setup_first_founder", "user", u.id, { ip: req.ip });
+  res.json({ user: present(u) });
 });
 
 authRouter.post("/logout", async (req, res) => {
@@ -105,6 +159,9 @@ authRouter.get("/meta", async (_req, res) => {
     transcriptionConfigured: transcriptionConfigured(),
     emailConfigured: emailConfigured(),
     storage: env.storageDriver,
+    // No founder yet: the sign-in page offers first-run setup instead.
+    setupNeeded: await noFounderYet(),
+    setupEnabled: Boolean(env.setupCode),
     database: env.databaseUrl ? "postgres" : "embedded",
   });
 });

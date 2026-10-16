@@ -297,7 +297,7 @@ function SystemSettings() {
     ["AI analysis", meta?.aiConfigured ? "Claude (Anthropic API)" : "Demo heuristics — set ANTHROPIC_API_KEY", meta?.aiConfigured],
     ["Transcription", meta?.transcriptionConfigured ? "Deepgram (Hindi/English, diarised)" : "Set DEEPGRAM_API_KEY", meta?.transcriptionConfigured],
     ["Email", meta?.emailConfigured ? "SMTP" : "Outbox only — set SMTP_HOST/USER/PASS", meta?.emailConfigured],
-    ["Recordings storage", meta?.storage === "supabase" ? "Supabase Storage (private bucket)" : "Local disk", meta?.storage === "supabase"],
+    ["Recordings storage", meta?.storage === "r2" ? "Cloudflare R2 (private bucket)" : meta?.storage === "supabase" ? "Supabase Storage (private bucket)" : "Local disk", meta?.storage === "r2" || meta?.storage === "supabase"],
     ["Database", meta?.database === "postgres" ? "Postgres (Supabase)" : "Embedded (development only)", meta?.database === "postgres"],
   ] as const;
   return (
