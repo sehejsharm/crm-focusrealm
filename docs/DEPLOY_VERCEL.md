@@ -91,6 +91,9 @@ them, and they choose their own password when they first sign in.
 
 ### First founder account (no demo data)
 
+Easiest: paste [LOGIN_SETUP_PROMPT.md](LOGIN_SETUP_PROMPT.md) into Claude in
+Chrome. It does the steps below and adds the other founders and Legion.
+
 1. In Vercel, add `SETUP_CODE` (any long random text, e.g.
    `openssl rand -hex 16`) and redeploy.
 2. Open the CRM. While there's no founder yet, the sign-in page shows

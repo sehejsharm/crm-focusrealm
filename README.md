@@ -36,7 +36,7 @@ it: tap to dial, then attach the recording.
 | **Founders** | FR number from Workspace | the first founder sets up on the sign-in page with `SETUP_CODE`; they add the others in **People & Access** |
 | **Legion** | `LG-0001`… (never on Workspace) | a founder adds them in **People & Access**; the CRM assigns the LG ID |
 
-Email works as a login too. Details: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md#who-signs-in-how).
+Email works as a login too. Details: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md#who-signs-in-how). Claude in Chrome prompt that sets up the first logins: [docs/LOGIN_SETUP_PROMPT.md](docs/LOGIN_SETUP_PROMPT.md).
 
 ## The sales journey (as specified by the founders)
 
