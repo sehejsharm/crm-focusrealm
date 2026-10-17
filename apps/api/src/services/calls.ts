@@ -243,11 +243,43 @@ function assertCanAttach(user: AuthUser, call: { user_id: string }) {
   if (call.user_id !== user.id && user.role !== "founder" && user.role !== "sales_head") throw forbidden();
 }
 
-function audioMime(mime: string) {
-  if (!mime.startsWith("audio/") && !mime.startsWith("video/") && mime !== "application/octet-stream") {
-    throw badRequest("That doesn't look like an audio recording");
+/** Browsers and phones label the same formats many ways; store one name for each. */
+const MIME_ALIASES: Record<string, string> = {
+  "audio/mp3": "audio/mpeg", "audio/x-mp3": "audio/mpeg", "audio/mpeg3": "audio/mpeg", "audio/x-mpeg": "audio/mpeg",
+  "audio/x-m4a": "audio/mp4", "audio/m4a": "audio/mp4", "video/mp4": "audio/mp4", "audio/x-aac": "audio/aac", "audio/aacp": "audio/aac",
+  "audio/x-wav": "audio/wav", "audio/wave": "audio/wav", "audio/vnd.wave": "audio/wav",
+  "audio/x-flac": "audio/flac", "video/webm": "audio/webm", "video/3gpp": "audio/3gpp", "audio/3gp": "audio/3gpp",
+  "audio/amr-wb": "audio/amr", "audio/x-amr": "audio/amr", "audio/opus": "audio/ogg",
+};
+
+export function audioMime(mimeIn: string) {
+  const mime = (mimeIn.split(";")[0] ?? "").trim().toLowerCase();
+  if (!mime || mime === "application/octet-stream") return "audio/mpeg";
+  if (!mime.startsWith("audio/") && !mime.startsWith("video/")) {
+    throw badRequest("That doesn't look like an audio recording — use MP3, M4A, WAV, AAC, OGG/Opus, AMR, 3GP, WebM or FLAC");
   }
-  return mime === "application/octet-stream" ? "audio/mpeg" : mime;
+  return MIME_ALIASES[mime] ?? mime;
+}
+
+/** The salesperson's recordings inbox: calls still waiting for a recording, and recent uploads. */
+export async function recordingsInbox(user: AuthUser) {
+  const waiting = await db.many(
+    `select k.id, k.call_code, k.started_at, k.outcome, k.mode, k.duration_sec, k.recording_status, c.full_name as contact_name, co.name as company_name
+     from crm_calls k join crm_contacts c on c.id = k.contact_id left join crm_companies co on co.id = c.company_id
+     where k.user_id = $1 and k.mode <> 'demo' and k.recording_status in ('none','awaiting','failed')
+       and (k.outcome is null or k.outcome = any($2::text[])) and k.started_at > now() - interval '14 days'
+     order by k.started_at desc limit 60`,
+    [user.id, CONNECTED],
+  );
+  const recent = await db.many(
+    `select k.id, k.call_code, k.started_at, k.recording_mime, k.recording_bytes, k.transcript_status, k.analysis_status, k.score,
+       c.full_name as contact_name, co.name as company_name
+     from crm_calls k join crm_contacts c on c.id = k.contact_id left join crm_companies co on co.id = c.company_id
+     where k.user_id = $1 and k.recording_status = 'uploaded'
+     order by k.updated_at desc limit 20`,
+    [user.id],
+  );
+  return { waiting, recent };
 }
 
 async function recordingStored(user: AuthUser, id: string, key: string, mime: string, size: number) {

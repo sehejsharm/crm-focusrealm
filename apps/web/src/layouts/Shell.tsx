@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell, BrainCircuit, CalendarCheck, ChartNoAxesCombined, ClipboardList, Contact, Crown, Database, FileText, Gauge, Handshake,
-  KanbanSquare, LayoutDashboard, ListTodo, LogOut, Menu, Moon, PhoneCall, ScrollText, Search, Settings, Shield, Shuffle,
+  KanbanSquare, LayoutDashboard, ListTodo, LogOut, Menu, Mic, Moon, PhoneCall, ScrollText, Search, Settings, Shield, Shuffle,
   Smartphone, Sparkles, Sun, Swords, Target, Users, X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -70,6 +70,7 @@ export function navFor(role: Role): { portal: string; title: string; items: NavI
     { to: "/sales/pipeline", label: "Pipeline", icon: KanbanSquare },
     { to: "/sales/follow-ups", label: "Follow-ups", icon: ClipboardList },
     { to: "/sales/calls", label: "My Calls", icon: PhoneCall },
+    { to: "/sales/recordings", label: "Upload Recordings", icon: Mic },
     { to: "/sales/coaching", label: "AI Coaching", icon: Sparkles },
   ];
   if (role === "sales_head") {

@@ -257,7 +257,9 @@ export function storageOrigin(): string | null {
 }
 
 export function recordingKey(callCode: string, mime: string) {
-  const ext = mime.includes("wav") ? "wav" : mime.includes("ogg") ? "ogg" : mime.includes("webm") ? "webm" : mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac") ? "m4a" : mime.includes("amr") ? "amr" : "mp3";
+  const ext = mime.includes("wav") ? "wav" : mime.includes("ogg") || mime.includes("opus") ? "ogg" : mime.includes("webm") ? "webm"
+    : mime.includes("3gp") ? "3gp" : mime.includes("flac") ? "flac" : mime.includes("amr") ? "amr"
+    : mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac") ? "m4a" : "mp3";
   const d = new Date();
   return `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${callCode}.${ext}`;
 }

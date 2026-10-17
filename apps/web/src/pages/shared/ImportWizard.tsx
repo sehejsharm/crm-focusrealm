@@ -1,16 +1,19 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import Papa from "papaparse";
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, UploadCloud, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Repeat, Shuffle, UploadCloud, Wand2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { celebrate, Counter } from "../../components/motion";
 import { useToast } from "../../components/toast";
-import { Badge, Button, Field, Input, Modal, Progress, Select } from "../../components/ui";
+import { Avatar, Badge, Button, Field, Input, Modal, Progress, Select, Switch } from "../../components/ui";
 import { api } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
 import { cn } from "../../lib/format";
+import { readXlsx } from "../../lib/xlsx";
 
 /**
- * Import the contact database from a CSV (export Excel/Google Sheets as CSV).
+ * Import the contact database from Excel (.xlsx) or CSV (Google Sheets:
+ * File → Download → .xlsx or .csv).
  * Columns are matched automatically and can be corrected; rows go up in
  * chunks so very large files work on serverless hosting too. The server
  * validates and de-duplicates (by phone, then email) and reports every
@@ -34,6 +37,21 @@ const FIELDS = [
 ] as const;
 
 type Mapping = Record<string, string>;
+
+/** A ready-to-fill template with every column the CRM understands. Opens in Excel. */
+export function downloadTemplate() {
+  const header = FIELDS.map((f) => f.label);
+  const examples = [
+    ["Rahul Sharma", "+91 98765 43210", "Sharma Textiles", "Owner", "rahul@sharmatextiles.in", "Surat", "Textiles", "SME", "Q4 Distributors", "Trade fair", "", "sharmatextiles.in", "Met at the Surat expo"],
+    ["Priya Nair", "9876501234", "Nair Logistics", "Operations Head", "priya@nairlogistics.com", "Kochi", "Logistics", "Mid-market", "Q4 Distributors", "LinkedIn", "0484 2345678", "", ""],
+  ];
+  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const csv = [header, ...examples].map((r) => r.map(esc).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: "focus-realm-contacts-template.csv" });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 const CHUNK = 1500;
 
 function autoMap(headers: string[]): Mapping {
@@ -70,8 +88,26 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
   };
 
   const load = useCallback((f: File) => {
+    const name = f.name.toLowerCase();
+    if (name.endsWith(".xls")) {
+      toast({ kind: "error", title: "Old Excel format", body: "Open it in Excel and save as .xlsx (or .csv), then import that." });
+      return;
+    }
     setFile(f);
     setResult(null);
+    if (name.endsWith(".xlsx")) {
+      readXlsx(f)
+        .then(({ headers: hs, rows: rs }) => {
+          setHeaders(hs);
+          setRows(rs);
+          setMap(autoMap(hs));
+        })
+        .catch((e) => {
+          setFile(null);
+          toast({ kind: "error", title: "Couldn't read that Excel file", body: (e as Error).message });
+        });
+      return;
+    }
     Papa.parse<Record<string, string>>(f, {
       header: true,
       skipEmptyLines: "greedy",
@@ -133,7 +169,7 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
       size="xl"
       icon={<FileSpreadsheet className="size-5" />}
       title="Import your contact database"
-      subtitle="CSV from Excel or Google Sheets · duplicates and invalid numbers are caught automatically"
+      subtitle="Excel (.xlsx) or CSV · duplicates and invalid numbers are caught automatically"
       footer={
         result ? (
           <Button variant="primary" onClick={() => { onClose(); setTimeout(reset, 300); }}>Done</Button>
@@ -164,12 +200,19 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
             }}
             className={cn("relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-3xl border-2 border-dashed px-6 py-16 text-center transition", drag ? "border-brand-500 bg-accent-soft" : "border-line-strong bg-sunken/60 hover:border-brand-400")}
           >
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && load(e.target.files[0])} />
+            <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(e) => e.target.files?.[0] && load(e.target.files[0])} />
             <motion.div animate={{ y: drag ? -8 : [0, -6, 0] }} transition={{ duration: drag ? 0.2 : 2.6, repeat: drag ? 0 : Infinity }} className="grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 text-white shadow-brand">
               <UploadCloud className="size-8" />
             </motion.div>
-            <p className="mt-4 text-base font-bold text-fg">Drop your CSV here, or click to choose</p>
-            <p className="mt-1 text-sm text-muted">Needs at least a name and a phone column. Excel? File → Save As → CSV.</p>
+            <p className="mt-4 text-base font-bold text-fg">Drop your Excel or CSV file here, or click to choose</p>
+            <p className="mt-1 text-sm text-muted">Needs at least a name and a phone column — any column names work, they're matched automatically.</p>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); downloadTemplate(); }}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-surface px-3 py-1.5 text-xs font-semibold text-accent shadow-xs ring-1 ring-line hover:ring-brand-300"
+            >
+              <Download className="size-3.5" /> Download the template
+            </button>
           </motion.label>
         )}
 
@@ -235,8 +278,9 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
                 <CheckCircle2 className="size-9" />
               </motion.div>
               <p className="mt-3 text-xl font-bold text-fg"><Counter value={result.created} /> prospects added</p>
-              <p className="text-sm text-muted">Ready to allocate to the sales team.</p>
+              <p className="text-sm text-muted">{result.created ? "Now hand them to the sales team." : "Nothing new — every row was already in the CRM or couldn't be used."}</p>
             </div>
+            <AllocateNow />
             <div className="grid grid-cols-3 gap-3">
               {[
                 ["Rows read", result.total, "brand"],
@@ -267,5 +311,73 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
         )}
       </AnimatePresence>
     </Modal>
+  );
+}
+
+/**
+ * Right after an import: fill everyone's book now, and keep topping them up
+ * every morning from what's left — so a big list (thousands of leads) flows
+ * to the team at a pace they can actually call.
+ */
+function AllocateNow() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { user } = useAuth();
+  const founder = user?.role === "founder";
+  const o = useQuery({
+    queryKey: ["allocation-overview"],
+    queryFn: () => api.get<{ pool: number; room: number; people: { id: string; full_name: string; avatar_hue: number; active: number }[]; settings: { maxActive: number; batchSize: number; autoEnabled: boolean; autoTime: string } }>("/allocation/overview"),
+  });
+  const [done, setDone] = useState<number | null>(null);
+  const run = useMutation({
+    mutationFn: () => api.post<{ assigned: number }>("/allocation/run", { userIds: o.data!.people.map((p) => p.id), batchSize: Math.min(100, o.data!.settings.maxActive) }),
+    onSuccess: (r) => { setDone(r.assigned); if (r.assigned) celebrate(); qc.invalidateQueries(); },
+    onError: (e) => toast({ kind: "error", title: "Couldn't allocate", body: (e as Error).message }),
+  });
+  const auto = useMutation({
+    mutationFn: (on: boolean) => api.put("/settings/allocation", { autoEnabled: on }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["allocation-overview"] }); qc.invalidateQueries({ queryKey: ["settings"] }); },
+    onError: (e) => toast({ kind: "error", title: "Couldn't change it", body: (e as Error).message }),
+  });
+  if (!o.data) return null;
+  const d = o.data;
+  const now = Math.min(d.pool, d.room);
+  return (
+    <div className="space-y-3 rounded-2xl border border-brand-200 bg-accent-soft/40 p-4 dark:border-brand-900">
+      <div className="flex items-center gap-2">
+        <Shuffle className="size-4 text-accent" />
+        <p className="text-sm font-bold text-fg">Allocate to the sales team</p>
+        <span className="ml-auto flex -space-x-2">{d.people.slice(0, 6).map((p) => <Avatar key={p.id} name={p.full_name} hue={p.avatar_hue} size={26} className="ring-2 ring-surface" />)}</span>
+      </div>
+      {d.people.length === 0 ? (
+        <p className="text-sm text-muted">No active salespeople yet — they arrive from the HR console. The prospects wait safely in the database until then.</p>
+      ) : done != null ? (
+        <p className="flex items-center gap-2 text-sm font-semibold text-success"><CheckCircle2 className="size-4" /> {done.toLocaleString("en-IN")} prospects allocated — everyone has been notified.</p>
+      ) : (
+        <>
+          <p className="text-sm text-muted">
+            <b className="text-fg">{d.pool.toLocaleString("en-IN")}</b> unassigned prospects · <b className="text-fg">{d.people.length}</b> salespeople with room for <b className="text-fg">{d.room.toLocaleString("en-IN")}</b> right now (max {d.settings.maxActive} active each). Fair, randomised split; nobody goes over their limit.
+          </p>
+          {now ? (
+            <Button variant="primary" icon={<Shuffle className="size-4" />} loading={run.isPending} onClick={() => run.mutate()}>
+              Allocate {now.toLocaleString("en-IN")} now
+            </Button>
+          ) : (
+            <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-fg">
+              Everyone already has {d.settings.maxActive} active prospects, the most allowed. Switch on the morning top-up below so new ones flow in as they work through their lists
+              {founder ? <> — or <a href="/founder/settings?tab=allocation" className="font-semibold text-accent hover:underline">raise the limit</a>.</> : "."}
+            </p>
+          )}
+        </>
+      )}
+      <div className="flex items-start gap-3 rounded-xl bg-surface px-3 py-2.5 ring-1 ring-line">
+        <Repeat className="mt-0.5 size-4 shrink-0 text-accent" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-fg">Top everyone up every morning</p>
+          <p className="text-xs text-muted">At {d.settings.autoTime}, Mon–Sat, each salesperson gets up to {d.settings.batchSize} new prospects from what's left{founder ? "" : " (founders can switch this on)"}.</p>
+        </div>
+        <Switch checked={d.settings.autoEnabled} disabled={!founder || auto.isPending} onChange={(v) => auto.mutate(v)} label="Morning top-up" />
+      </div>
+    </div>
   );
 }

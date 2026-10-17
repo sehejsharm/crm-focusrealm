@@ -4,6 +4,7 @@ import {
   BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, FileText, Link2, Mail, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useToast } from "../../components/toast";
 import { Avatar, Badge, Button, Card, CardHeader, Field, Input, PageHeader, Select, Skeleton, Switch, Tabs, Textarea } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -13,13 +14,14 @@ import { ago, cn, ROLE_LABEL } from "../../lib/format";
 type Section = "reports" | "calling" | "hr" | "allocation" | "qualification" | "system";
 
 export default function Settings() {
-  const [section, setSection] = useState<Section>("reports");
+  const [params] = useSearchParams();
+  const [section, setSection] = useState<Section>((params.get("tab") as Section) || "reports");
   const q = useQuery({ queryKey: ["settings"], queryFn: () => api.get<{ settings: any }>("/settings") });
   return (
     <div>
       <PageHeader eyebrow="Admin" title="Settings" subtitle="Founders control how the CRM behaves. Every change is written to the audit log." />
       <Tabs className="mb-5" value={section} onChange={setSection} items={[
-        { value: "reports", label: "📧 Daily reports" },
+        { value: "reports", label: "📊 Daily reports" },
         { value: "calling", label: "📞 Calling & recording" },
         { value: "hr", label: "🔗 HR console" },
         { value: "allocation", label: "🔀 Allocation" },
@@ -216,6 +218,12 @@ function AllocationSettings({ value }: { value: any }) {
       <Row title="Inactivity threshold (days)" body="No calls for this long flags someone's prospects for review."><Input type="number" min={1} value={v.inactivityDays} onChange={num("inactivityDays")} className="w-28" /></Row>
       <Row title="Stale lead (days)" body="A prospect with no next action for this long counts as stale."><Input type="number" min={1} value={v.staleDays} onChange={num("staleDays")} className="w-28" /></Row>
       <Row title="Sales heads can reassign" body="Founders always can. A reason is always required."><Switch checked={v.headsCanReassign} onChange={(x) => setV({ ...v, headsCanReassign: x })} /></Row>
+      <Row title="Morning top-up" body="Mon–Sat at this time, every active salesperson gets up to the batch size of new prospects from the unassigned pool — so a big import flows to the team automatically.">
+        <div className="flex items-center gap-3">
+          <Input type="time" value={v.autoTime} disabled={!v.autoEnabled} onChange={(e) => setV({ ...v, autoTime: e.target.value })} className="w-32" />
+          <Switch checked={v.autoEnabled} onChange={(x) => setV({ ...v, autoEnabled: x })} />
+        </div>
+      </Row>
       <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} onClick={() => save.mutate(v)}>Save allocation defaults</Button></div>
     </Card>
   );

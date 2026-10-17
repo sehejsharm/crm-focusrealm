@@ -9,7 +9,7 @@ import { audit } from "../lib/record.js";
 import { todayLocal } from "../lib/time.js";
 import { inactivityFlags, previewAllocation, reassignContact, runAllocation } from "../services/allocation.js";
 import {
-  attachRecording, callDetail, completeRecordingUpload, listCalls, logOutcome, OUTCOMES, recordingPlaybackUrl, recordingUploadTarget,
+  attachRecording, recordingsInbox, callDetail, completeRecordingUpload, listCalls, logOutcome, OUTCOMES, recordingPlaybackUrl, recordingUploadTarget,
   reviewCall, startCall, streamRecording, updateCallStatus,
 } from "../services/calls.js";
 import {
@@ -20,7 +20,7 @@ import { founderDashboard, legionDashboard, objectionInsights, repDashboard, tea
 import { enqueue, jobStats, retryFailed } from "../services/jobs.js";
 import { listMeetings, scheduleMeeting, updateMeeting } from "../services/meetings.js";
 import { buildReport, runDailyReports } from "../services/reports.js";
-import { getAllSettings, putSetting, settingSchemas, type SettingKey } from "../services/settings.js";
+import { getAllSettings, getSetting, putSetting, settingSchemas, type SettingKey } from "../services/settings.js";
 import { hrStatus } from "../services/hr.js";
 import { createTask, listTasks, updateTask } from "../services/tasks.js";
 
@@ -298,6 +298,22 @@ api.get("/allocation/batches", manager, async (_req, res) => {
 
 api.get("/allocation/flags", manager, async (_req, res) => res.json({ flags: await inactivityFlags() }));
 
+/** The unassigned pool and everyone's room — for "allocate now" after an import. */
+api.get("/allocation/overview", manager, async (_req, res) => {
+  const s = await getSetting("allocation");
+  const pool = await db.one<{ n: number }>(
+    `select count(*)::int as n from crm_contacts c where c.owner_id is null and c.do_not_contact = false and c.is_invalid = false
+       and c.stage = 'prospect' and c.status in ('new','returned') and c.phone_key is not null`,
+  );
+  const people = await db.many(
+    `select u.id, u.full_name, u.avatar_hue,
+       (select count(*)::int from crm_contacts c where c.owner_id = u.id and c.status in ('new','outreach','follow_up','qualification_review','qualified','returned')) as active
+     from crm_users u where u.status = 'active' and u.role = 'sales_rep' order by u.full_name`,
+  );
+  const room = people.reduce((n, p) => n + Math.max(0, s.maxActive - p.active), 0);
+  res.json({ pool: pool.n, people, room, settings: s });
+});
+
 // ------------------------------------------------------------------- calls
 
 api.post("/calls", async (req, res) => {
@@ -330,6 +346,8 @@ api.get("/calls/live", async (req, res) => {
   );
   res.json({ call });
 });
+
+api.get("/calls/recordings", async (req, res) => res.json(await recordingsInbox(req.user!)));
 
 api.get("/calls/awaiting-recording", async (req, res) => {
   res.json({

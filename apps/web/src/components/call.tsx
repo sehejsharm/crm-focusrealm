@@ -8,6 +8,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cn, duration, localInput, OUTCOMES, phone as fmtPhone } from "../lib/format";
 import { useFastLive, useLive } from "../lib/live";
+import { AUDIO_ACCEPT } from "../lib/audio";
 import { uploadRecording } from "../lib/recording";
 import type { Call } from "../lib/types";
 import { celebrate, PulseRings, Waveform } from "./motion";
@@ -381,7 +382,7 @@ export function WrapUp({ call, target, onClose }: { call: Call | null; target: C
               </div>
               {call.mode !== "bridge" && (
                 <>
-                  <input ref={fileRef} type="file" accept="audio/*,.m4a,.amr,.mp3,.wav,.ogg,.aac" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                  <input ref={fileRef} type="file" accept={AUDIO_ACCEPT} className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                   <Button size="sm" variant="soft" icon={<Upload className="size-4" />} onClick={() => fileRef.current?.click()}>
                     {file ? "Change" : "Choose"}
                   </Button>

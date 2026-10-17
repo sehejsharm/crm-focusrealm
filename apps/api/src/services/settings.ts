@@ -19,6 +19,11 @@ export const settingSchemas = {
     staleDays: z.number().int().min(1).max(60),
     /** Who may reassign: founders always; sales heads when true. */
     headsCanReassign: z.boolean(),
+    /** Auto top-up: every morning (Mon–Sat) each active salesperson gets up to
+     *  batchSize new prospects from the unassigned pool, never above maxActive. */
+    autoEnabled: z.boolean(),
+    /** Local time the morning top-up runs, HH:MM. */
+    autoTime: z.string().regex(/^\d{2}:\d{2}$/),
   }),
   reports: z.object({
     enabled: z.boolean(),
@@ -64,7 +69,7 @@ export type SettingKey = keyof typeof settingSchemas;
 export type Settings = { [K in SettingKey]: z.infer<(typeof settingSchemas)[K]> };
 
 export const defaults: Settings = {
-  allocation: { batchSize: 10, maxActive: 60, inactivityDays: 3, staleDays: 7, headsCanReassign: true },
+  allocation: { batchSize: 10, maxActive: 60, inactivityDays: 3, staleDays: 7, headsCanReassign: true, autoEnabled: false, autoTime: "09:30" },
   reports: {
     enabled: true,
     time: "20:00",

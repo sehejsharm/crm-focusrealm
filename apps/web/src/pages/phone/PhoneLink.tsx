@@ -11,6 +11,7 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, cn, OUTCOMES } from "../../lib/format";
 import { useFastLive, useLive, useLiveStatus } from "../../lib/live";
+import { AUDIO_ACCEPT } from "../../lib/audio";
 import { uploadRecording } from "../../lib/recording";
 
 interface Dial {
@@ -171,7 +172,7 @@ export default function PhoneLink() {
               <div className="mt-5 rounded-2xl bg-white/10 p-4">
                 <p className="flex items-center gap-2 text-sm font-semibold"><Mic className="size-4" /> Attach the recording</p>
                 <p className="mt-1 text-xs text-white/65">Pick the file from your phone's call recordings. You can also add notes later on your laptop.</p>
-                <input ref={fileRef} type="file" accept="audio/*,.m4a,.amr,.mp3,.wav,.ogg,.aac,.3gp" className="hidden" onChange={(e) => e.target.files?.[0] && finish(e.target.files[0])} />
+                <input ref={fileRef} type="file" accept={AUDIO_ACCEPT} className="hidden" onChange={(e) => e.target.files?.[0] && finish(e.target.files[0])} />
                 {progress != null ? <Progress value={progress} className="mt-3 bg-white/10" /> : (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-brand-800"><Upload className="size-4" /> Recording</button>
@@ -192,7 +193,7 @@ export default function PhoneLink() {
               <label key={c.id} className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white/10 px-3 py-2.5">
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{c.contact_name}</span><span className="text-[11px] text-white/60">{c.call_code} · {ago(c.started_at)}</span></span>
                 {attachFor === c.id ? <span className="size-5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <span className="flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-brand-800"><Upload className="size-3.5" />Attach</span>}
-                <input type="file" accept="audio/*,.m4a,.amr,.mp3,.wav,.ogg,.aac,.3gp" className="hidden" onChange={(e) => e.target.files?.[0] && attachLater(c.id, e.target.files[0])} />
+                <input type="file" accept={AUDIO_ACCEPT} className="hidden" onChange={(e) => e.target.files?.[0] && attachLater(c.id, e.target.files[0])} />
               </label>
             ))}
           </div>

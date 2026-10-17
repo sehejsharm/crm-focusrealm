@@ -8,6 +8,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { BarList, Radar, ScoreRing } from "../../components/charts";
 import { Waveform } from "../../components/motion";
+import { RecordingDrop } from "../../components/recording";
 import { useToast } from "../../components/toast";
 import { Avatar, Badge, Button, Card, CardHeader, Empty, Input, Skeleton, Stagger, staggerItem, Tabs } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -68,6 +69,9 @@ export default function CallDetail() {
             )}
           </div>
           {k.recording_status === "uploaded" && <RecordingPlayer callId={k.id} />}
+          {k.recording_status !== "uploaded" && k.mode !== "demo" && (k.user_id === user?.id || manager) && (
+            <div className="mt-5 rounded-2xl bg-white/95 p-1 dark:bg-surface"><RecordingDrop callId={k.id} /></div>
+          )}
         </div>
         {a ? (
           <div className="space-y-3 p-5 sm:p-6">

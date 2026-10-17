@@ -12,6 +12,7 @@ const Welcome = lazy(() => import("./pages/Welcome"));
 const Profile = lazy(() => import("./pages/Profile"));
 const PhoneLink = lazy(() => import("./pages/phone/PhoneLink"));
 const MyDay = lazy(() => import("./pages/sales/MyDay"));
+const Recordings = lazy(() => import("./pages/sales/Recordings"));
 const Prospects = lazy(() => import("./pages/shared/Prospects"));
 const Pipeline = lazy(() => import("./pages/shared/Pipeline"));
 const ContactDetail = lazy(() => import("./pages/shared/ContactDetail"));
@@ -117,6 +118,7 @@ function SalesRoutes() {
       <Route index element={<MyDay />} />
       <Route path="prospects" element={<Prospects scope="mine" />} />
       <Route path="follow-ups" element={<Tasks mode="mine" />} />
+      <Route path="recordings" element={<Recordings />} />
       <Route path="coaching" element={<Coaching />} />
       <Route path="coaching/:id" element={<ReportDetail />} />
       <Route path="allocation" element={<Allocation />} />
