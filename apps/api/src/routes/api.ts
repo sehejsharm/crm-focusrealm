@@ -5,7 +5,7 @@ import { db } from "../db/index.js";
 import { hashPassword, isManager, nextLoginId, requireRole, temporaryPassword, USER_COLUMNS } from "../lib/auth.js";
 import { badRequest, forbidden, notFound, parse, zId, zIsoDate, zPage } from "../lib/http.js";
 import { phoneKey } from "../lib/phone.js";
-import { audit } from "../lib/record.js";
+import { activity, audit } from "../lib/record.js";
 import { todayLocal } from "../lib/time.js";
 import { inactivityFlags, previewAllocation, reassignContact, runAllocation } from "../services/allocation.js";
 import {
@@ -13,7 +13,7 @@ import {
   reviewCall, startCall, streamRecording, updateCallStatus,
 } from "../services/calls.js";
 import {
-  addNote, changeStatus, closeContact, contactDetail, createContact, decideHandoff, facets, importContacts, listContacts,
+  addNote, canView, changeStatus, closeContact, contactDetail, createContact, decideHandoff, facets, getContactRow, importContacts, listContacts,
   moveStage, STAGES, STATUSES, submitHandoff, updateContact,
 } from "../services/contacts.js";
 import { founderDashboard, legionDashboard, objectionInsights, repDashboard, teamDashboard } from "../services/dashboards.js";
@@ -22,6 +22,7 @@ import { listMeetings, scheduleMeeting, updateMeeting } from "../services/meetin
 import { buildReport, runDailyReports } from "../services/reports.js";
 import { getAllSettings, getSetting, putSetting, settingSchemas, type SettingKey } from "../services/settings.js";
 import { hrStatus } from "../services/hr.js";
+import { sprintQueue } from "../services/sprint.js";
 import { createTask, listTasks, updateTask } from "../services/tasks.js";
 
 export const api = Router();
@@ -251,6 +252,18 @@ api.post("/contacts/:id/stage", async (req, res) => {
 api.post("/contacts/:id/notes", async (req, res) => {
   const body = parse(z.object({ body: z.string().min(1).max(5000) }), req.body);
   res.json({ activity: await addNote(req.user!, parse(zId, req.params.id), body.body) });
+});
+
+api.get("/whatsapp/templates", async (_req, res) => res.json(await getSetting("whatsapp")));
+
+/** A WhatsApp message was opened for this prospect: put it on the timeline. */
+api.post("/contacts/:id/whatsapp", async (req, res) => {
+  const body = parse(z.object({ label: z.string().max(60).optional().nullable(), text: z.string().max(1000) }), req.body);
+  const id = parse(zId, req.params.id);
+  const c = await getContactRow(id);
+  if (!canView(req.user!, c)) throw forbidden();
+  await db.query(`update crm_contacts set last_contacted_at = now(), updated_at = now() where id = $1`, [id]);
+  res.json({ activity: await activity(id, req.user!.id, "whatsapp", body.label ? `WhatsApp: ${body.label}` : "WhatsApp message", body.text) });
 });
 
 api.post("/contacts/:id/reassign", manager, async (req, res) => {
@@ -531,6 +544,7 @@ api.patch("/meetings/:id", async (req, res) => {
 // -------------------------------------------------------------- dashboards
 
 api.get("/dashboard/rep", async (req, res) => res.json(await repDashboard(req.user!)));
+api.get("/sprint", async (req, res) => res.json(await sprintQueue(req.user!)));
 api.get("/dashboard/team", async (req, res) => {
   if (req.user!.role === "sales_rep") throw forbidden();
   const date = typeof req.query.date === "string" ? parse(zIsoDate, req.query.date) : undefined;

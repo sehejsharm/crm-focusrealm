@@ -57,6 +57,10 @@ export const settingSchemas = {
     /** Title keywords that make someone a sales head instead of a salesperson. */
     headKeywords: z.array(z.string()).max(20),
   }),
+  whatsapp: z.object({
+    /** One-tap WhatsApp messages. Placeholders: {first_name} {name} {company} {my_name} {my_first_name}. */
+    templates: z.array(z.object({ key: z.string().max(40), label: z.string().min(1).max(60), text: z.string().min(1).max(1000) })).max(12),
+  }),
   qualification: z.object({
     /** The checklist a prospect must satisfy before it can be handed to Legion. */
     fields: z
@@ -86,6 +90,13 @@ export const defaults: Settings = {
   hr: {
     crmDepartments: ["sales", "business development", "business-development", "bd", "inside sales"],
     headKeywords: ["head", "lead", "manager", "vp", "director"],
+  },
+  whatsapp: {
+    templates: [
+      { key: "intro", label: "After a good call", text: "Hi {first_name}, this is {my_first_name} from Focus Realm. Thanks for your time just now! As discussed, here's a quick overview of how we help businesses like {company}. When suits you for a short meeting with our team?" },
+      { key: "missed", label: "Couldn't reach them", text: "Hi {first_name}, this is {my_first_name} from Focus Realm. I tried calling you just now — when would be a good time for a quick 5-minute chat?" },
+      { key: "meeting", label: "Meeting reminder", text: "Hi {first_name}, a quick reminder about your meeting with the Focus Realm team. Looking forward to it! — {my_first_name}" },
+    ],
   },
   qualification: {
     fields: [

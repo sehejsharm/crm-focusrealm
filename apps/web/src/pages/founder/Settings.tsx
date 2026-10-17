@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, FileText, Link2, Mail, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
+  BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, FileText, Link2, Mail, MessageCircle, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -11,7 +11,7 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, cn, ROLE_LABEL } from "../../lib/format";
 
-type Section = "reports" | "calling" | "hr" | "allocation" | "qualification" | "system";
+type Section = "reports" | "calling" | "hr" | "allocation" | "qualification" | "system" | "whatsapp";
 
 export default function Settings() {
   const [params] = useSearchParams();
@@ -26,6 +26,7 @@ export default function Settings() {
         { value: "hr", label: "🔗 HR console" },
         { value: "allocation", label: "🔀 Allocation" },
         { value: "qualification", label: "✅ Qualification" },
+        { value: "whatsapp", label: "💬 WhatsApp" },
         { value: "system", label: "⚙️ System" },
       ]} />
       {!q.data ? <Skeleton className="h-96" /> : (
@@ -36,6 +37,7 @@ export default function Settings() {
             {section === "hr" && <HrSettings value={q.data.settings.hr} />}
             {section === "allocation" && <AllocationSettings value={q.data.settings.allocation} />}
             {section === "qualification" && <QualificationSettings value={q.data.settings.qualification} />}
+            {section === "whatsapp" && <WhatsAppSettings value={q.data.settings.whatsapp} />}
             {section === "system" && <SystemSettings />}
           </motion.div>
         </AnimatePresence>
@@ -52,6 +54,7 @@ function useSave(key: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settings"] });
       qc.invalidateQueries({ queryKey: ["meta"] });
+      qc.invalidateQueries({ queryKey: ["whatsapp-templates"] });
       toast({ kind: "success", title: "Settings saved" });
     },
     onError: (e) => toast({ kind: "error", title: "Couldn't save", body: (e as Error).message }),
@@ -286,5 +289,37 @@ function SystemSettings() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function WhatsAppSettings({ value }: { value: { templates: { key: string; label: string; text: string }[] } }) {
+  const [list, setList] = useState(value.templates);
+  useEffect(() => setList(value.templates), [value]);
+  const save = useSave("whatsapp");
+  const set = (i: number, k: "label" | "text", v: string) => setList(list.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
+  return (
+    <Card spotlight={false} className="max-w-3xl">
+      <CardHeader title="WhatsApp quick messages" subtitle="One tap from a prospect's page or the Call Sprint opens WhatsApp with the message ready, and logs it on the timeline" icon={<MessageCircle className="size-4" />} />
+      <div className="space-y-3 px-5 pb-5">
+        <p className="rounded-xl bg-sunken px-3 py-2 text-xs text-muted">
+          Placeholders: <code>{"{first_name}"}</code> <code>{"{name}"}</code> <code>{"{company}"}</code> <code>{"{my_first_name}"}</code> <code>{"{my_name}"}</code>
+        </p>
+        <AnimatePresence initial={false}>
+          {list.map((t, i) => (
+            <motion.div key={t.key} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-2 rounded-2xl border border-line p-3">
+              <div className="flex items-center gap-2">
+                <Input value={t.label} onChange={(e) => set(i, "label", e.target.value)} placeholder="Name, e.g. After a good call" className="h-9" />
+                <button onClick={() => setList(list.filter((_, j) => j !== i))} className="rounded-lg p-1.5 text-subtle hover:bg-danger-soft hover:text-danger" aria-label="Remove template"><Trash2 className="size-4" /></button>
+              </div>
+              <Textarea value={t.text} onChange={(e) => set(i, "text", e.target.value)} rows={3} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {list.length < 12 && (
+          <Button variant="soft" icon={<Plus className="size-4" />} onClick={() => setList([...list, { key: `t${Date.now().toString(36)}`, label: "New message", text: "Hi {first_name}, " }])}>Add a message</Button>
+        )}
+      </div>
+      <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} disabled={list.some((t) => !t.label.trim() || !t.text.trim())} onClick={() => save.mutate({ templates: list })}>Save messages</Button></div>
+    </Card>
   );
 }

@@ -31,9 +31,11 @@ interface CallTarget {
 interface Ctx {
   start: (contact: CallTarget) => Promise<void>;
   active: Call | null;
+  /** A call is live or its wrap-up is still open. */
+  busy: boolean;
 }
 
-const CallCtx = createContext<Ctx>({ start: async () => {}, active: null });
+const CallCtx = createContext<Ctx>({ start: async () => {}, active: null, busy: false });
 export const useCall = () => useContext(CallCtx);
 
 export function CallProvider({ children }: { children: ReactNode }) {
@@ -88,7 +90,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <CallCtx.Provider value={{ start, active }}>
+    <CallCtx.Provider value={{ start, active, busy: Boolean(active || wrapUp) }}>
       {children}
       <AnimatePresence>
         {active && target && (
