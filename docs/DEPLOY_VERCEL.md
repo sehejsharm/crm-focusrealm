@@ -9,7 +9,7 @@ Browser ──► Vercel CDN (apps/web/dist — the React app)
         └─► /api/*  ──► one Vercel Function (api/index.mjs → Express API)
                           ├─► Supabase Postgres (pooler)
                           ├─► Cloudflare R2 (private recordings bucket)
-                          ├─► Anthropic (Claude) · Deepgram · SMTP · Exotel/Twilio
+                          ├─► Claude or Gemini · Deepgram · SMTP (optional) · Exotel/Twilio
                           └─◄ HR console (signed events)
 Vercel Cron ──► /api/cron/daily-reports (20:00 IST) · /api/cron/maintenance
 ```
@@ -64,9 +64,10 @@ prompt doc).
    | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | ✅ | Cloudflare R2, for call recordings (section 2) |
    | `APP_URL` | recommended | your domain, e.g. `https://crm.focusrealm.com` (defaults to the Vercel production URL) |
    | `HR_WEBHOOK_SECRET` | for HR sync | same value as `FOCUS_REALM_CRM_SECRET` in the HR console |
-   | `ANTHROPIC_API_KEY` | for real AI | otherwise demo analysis |
-   | `DEEPGRAM_API_KEY` | for transcripts | otherwise recordings are stored but not transcribed |
-   | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | for report emails | e.g. your SpaceMail mailbox |
+   | `ANTHROPIC_API_KEY` (+ `AI_MODEL`) | for real AI | paid; see README → AI costs |
+   | or `GEMINI_API_KEY` + `AI_PROVIDER=gemini` | free AI option | also transcribes without Deepgram; see README → AI costs |
+   | `DEEPGRAM_API_KEY` | for transcripts with Claude | otherwise recordings are stored but not transcribed |
+   | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | optional | urgent alerts by email too; reports are never emailed |
    | `TELEPHONY_PROVIDER` + Exotel/Twilio keys, `TELEPHONY_WEBHOOK_TOKEN` | for bridge calling | see `.env.example` |
    | `SETUP_CODE` | for first setup | lets the first founder create their login on the sign-in page; useless once a founder exists |
    | `SEED_DEMO`, `DEMO_LOGINS` | optional | `true` to try it with demo data — turn off before real use |
@@ -119,13 +120,13 @@ DATABASE_URL="<the Supabase connection string>" npm run create-user -- \
 
 Vercel functions don't run between requests, so the CRM is built for that:
 
-- **Jobs** (transcription, AI analysis, report writing, emails) live in the
+- **Jobs** (transcription, AI analysis, report writing, alert emails) live in the
   `crm_jobs` table. After a request queues one, the same function keeps running
   it after the response (`waitUntil`), with retries and backoff.
 - **End-of-day reports**: Vercel Cron calls `/api/cron/daily-reports` at
   **14:30 UTC = 20:00 IST** (change it in `vercel.json`). It queues every
   recording of the day for analysis in parallel, then one report per
-  salesperson, then the emails. A big day that doesn't fit in one 5-minute
+  salesperson, shown in Daily Reports. A big day that doesn't fit in one 5-minute
   invocation hands itself on to a fresh one automatically.
 - **Reminders & overdue escalation**: `/api/cron/maintenance` runs daily, and
   any signed-in activity nudges the queue and reminders along (at most once a
@@ -150,8 +151,12 @@ exact cron timing and longer functions.
 - **Bridge calling** (auto-recorded calls): set the Exotel or Twilio variables,
   then **Settings → Calling → Bridge**. Each person adds their phone number in
   **My profile**.
-- **Report recipients**: **Settings → Daily reports** (founders and sales heads
-  are included automatically; add the CEO/COO or anyone else there).
+- **Your contact database**: **Database & Import → Import Excel / CSV**
+  (download the template there if you like), then **Allocate now** and switch
+  on the **morning top-up** so the rest flows to the team every morning.
+- **Daily reports** need no setup: they appear in Daily Reports for the
+  founders, sales heads and Legion. Change the time in **Settings → Daily
+  reports**.
 
 ## Self-hosting instead (Render, Railway, a VM)
 
