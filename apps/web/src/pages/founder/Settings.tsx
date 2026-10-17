@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, Link2, Mail, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
+  BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, FileText, Link2, Mail, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { useToast } from "../../components/toast";
@@ -73,76 +73,32 @@ function ReportsSettings({ value }: { value: any }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]">
       <Card spotlight={false}>
-        <CardHeader title="End-of-day run" subtitle="Analyse every recording, write one report per salesperson, email it" icon={<BrainCircuit className="size-4" />} />
+        <CardHeader title="End-of-day run" subtitle="Analyse every recording and write one report per salesperson" icon={<BrainCircuit className="size-4" />} />
         <Row title="Daily reports" body="Turn the automatic evening run on or off."><Switch checked={v.enabled} onChange={(x) => set("enabled", x)} /></Row>
-        <Row title="Run time (IST)" body="When the analysis and emails start. On Vercel, the cron in vercel.json also triggers at 20:00 IST."><Input type="time" value={v.time} onChange={(e) => set("time", e.target.value)} className="w-32" /></Row>
+        <Row title="Run time (IST)" body="When the analysis starts. On Vercel, the cron in vercel.json also triggers at 20:00 IST."><Input type="time" value={v.time} onChange={(e) => set("time", e.target.value)} className="w-32" /></Row>
         <Row title="When to analyse calls" body="End of day matches your journey: all of the day's recordings are analysed together in the evening. Immediate also gives reps coaching minutes after each call.">
           <Select value={v.analysisMode} onChange={(e) => set("analysisMode", e.target.value)} className="w-44"><option value="end_of_day">End of day</option><option value="immediate">Immediately + end of day</option></Select>
         </Row>
         <Row title="Skip days with no calls" body="No empty reports on holidays."><Switch checked={v.skipEmptyDays} onChange={(x) => set("skipEmptyDays", x)} /></Row>
-        <CardHeader title="Who receives every report" icon={<Mail className="size-4" />} />
-        <Row title="Founders (CEO, COO…)" body="Every active founder with an email address."><Switch checked={v.includeFounders} onChange={(x) => set("includeFounders", x)} /></Row>
-        <Row title="Sales heads" body="Every active sales head."><Switch checked={v.includeSalesHeads} onChange={(x) => set("includeSalesHeads", x)} /></Row>
-        <Row title="The salesperson themself" body="Each person also gets their own report."><Switch checked={v.sendRepCopy} onChange={(x) => set("sendRepCopy", x)} /></Row>
         <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} onClick={() => save.mutate(v)}>Save report settings</Button></div>
       </Card>
-      <Recipients />
+      <Card spotlight={false}>
+        <CardHeader title="Where reports appear" subtitle="Nothing is emailed — everyone reads them in the CRM" icon={<FileText className="size-4" />} />
+        <div className="space-y-2 px-5 pb-5">
+          {[
+            ["Founders", "Daily Reports in the Founders portal, with a notification as each one is ready."],
+            ["Sales heads", "Daily Reports in the sales portal, for their whole team."],
+            ["Legion", "Daily Reports in the Legion portal, to see how the pipeline is being worked."],
+            ["Each salesperson", "Their own report only, under AI Coaching."],
+          ].map(([who, where]) => (
+            <div key={who} className="flex items-start gap-3 rounded-xl border border-line px-3 py-2.5">
+              <span className="mt-1 size-2 shrink-0 rounded-full bg-success" />
+              <span><span className="block text-sm font-semibold text-fg">{who}</span><span className="block text-xs text-muted">{where}</span></span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
-  );
-}
-
-function Recipients() {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const q = useQuery({ queryKey: ["recipients"], queryFn: () => api.get<{ recipients: any[]; automatic: any[] }>("/settings/recipients") });
-  const [f, setF] = useState({ name: "", email: "", label: "Board" });
-  const add = useMutation({
-    mutationFn: () => api.post("/settings/recipients", f),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["recipients"] }); qc.invalidateQueries({ queryKey: ["recipients-preview"] }); setF({ name: "", email: "", label: "Board" }); toast({ kind: "success", title: "Recipient added" }); },
-    onError: (e) => toast({ kind: "error", title: "Couldn't add", body: (e as Error).message }),
-  });
-  const toggle = useMutation({ mutationFn: (r: any) => api.patch(`/settings/recipients/${r.id}`, { active: !r.active }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recipients"] }) });
-  const remove = useMutation({ mutationFn: (id: string) => api.del(`/settings/recipients/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["recipients"] }) });
-  return (
-    <Card spotlight={false}>
-      <CardHeader title="Report recipients" subtitle="Add anyone else who should get the daily reports" icon={<Mail className="size-4" />} />
-      <div className="space-y-4 px-5 pb-5">
-        <div>
-          <p className="mb-2 text-xs font-bold tracking-wide text-muted uppercase">Automatic (from roles)</p>
-          <div className="space-y-1.5">
-            {(q.data?.automatic ?? []).map((p) => (
-              <div key={p.email ?? p.full_name} className="flex items-center gap-3 rounded-xl bg-sunken/70 px-3 py-2">
-                <Avatar name={p.full_name} size={28} />
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-fg">{p.full_name}</span><span className="block truncate text-xs text-muted">{p.email ?? "no email — won't receive"}</span></span>
-                <Badge tone="brand">{p.title ?? ROLE_LABEL[p.role]}</Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-bold tracking-wide text-muted uppercase">Added by founders</p>
-          <AnimatePresence initial={false}>
-            {(q.data?.recipients ?? []).map((r) => (
-              <motion.div key={r.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-1.5 flex items-center gap-3 rounded-xl border border-line px-3 py-2">
-                <span className="grid size-8 place-items-center rounded-full bg-accent-soft text-accent-soft-fg"><Mail className="size-4" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-fg">{r.name} <Badge tone="neutral" className="ml-1">{r.label}</Badge></span><span className="block truncate text-xs text-muted">{r.email}</span></span>
-                <Switch checked={r.active} onChange={() => toggle.mutate(r)} label="Active" />
-                <button onClick={() => remove.mutate(r.id)} className="rounded-lg p-1.5 text-subtle hover:bg-danger-soft hover:text-danger" aria-label="Remove"><Trash2 className="size-4" /></button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {!q.data?.recipients.length && <p className="text-sm text-muted">Nobody added yet.</p>}
-        </div>
-        <div className="rounded-2xl border border-dashed border-line-strong p-3">
-          <div className="grid gap-2 sm:grid-cols-[1fr_1.3fr_0.8fr]">
-            <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Name" />
-            <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="email@company.com" type="email" />
-            <Input value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="Label" />
-          </div>
-          <Button className="mt-2 w-full" variant="soft" icon={<Plus className="size-4" />} disabled={!f.name || !f.email} loading={add.isPending} onClick={() => add.mutate()}>Add recipient</Button>
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -294,9 +250,9 @@ function SystemSettings() {
   const jobs = useQuery({ queryKey: ["jobs"], queryFn: () => api.get<{ stats: any[]; failed: any[] }>("/jobs") });
   const retry = useMutation({ mutationFn: () => api.post<{ retried: number }>("/jobs/retry"), onSuccess: (r) => { toast({ kind: "success", title: `Retrying ${r.retried} jobs` }); qc.invalidateQueries({ queryKey: ["jobs"] }); } });
   const items = [
-    ["AI analysis", meta?.aiConfigured ? "Claude (Anthropic API)" : "Demo heuristics — set ANTHROPIC_API_KEY", meta?.aiConfigured],
-    ["Transcription", meta?.transcriptionConfigured ? "Deepgram (Hindi/English, diarised)" : "Set DEEPGRAM_API_KEY", meta?.transcriptionConfigured],
-    ["Email", meta?.emailConfigured ? "SMTP" : "Outbox only — set SMTP_HOST/USER/PASS", meta?.emailConfigured],
+    ["AI analysis", meta?.aiProvider === "gemini" ? `Google Gemini (${meta.aiModel})` : meta?.aiConfigured ? `Claude (${meta.aiModel})` : "Demo heuristics — set ANTHROPIC_API_KEY or GEMINI_API_KEY", meta?.aiConfigured],
+    ["Transcription", meta?.transcriptionConfigured ? (meta.aiProvider === "gemini" ? "Deepgram, or Gemini when there's no Deepgram key" : "Deepgram (Hindi/English, diarised)") : "Set DEEPGRAM_API_KEY (or use Gemini)", meta?.transcriptionConfigured],
+    ["Alert emails (optional)", meta?.emailConfigured ? "SMTP — urgent alerts also emailed" : "Off — alerts stay in the CRM", true],
     ["Recordings storage", meta?.storage === "r2" ? "Cloudflare R2 (private bucket)" : meta?.storage === "supabase" ? "Supabase Storage (private bucket)" : "Local disk", meta?.storage === "r2" || meta?.storage === "supabase"],
     ["Database", meta?.database === "postgres" ? "Postgres (Supabase)" : "Embedded (development only)", meta?.database === "postgres"],
   ] as const;

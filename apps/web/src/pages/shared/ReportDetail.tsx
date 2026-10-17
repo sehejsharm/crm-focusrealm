@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ArrowLeft, Briefcase, Dumbbell, Ear, Frown, Lightbulb, Mail, MessageCircle, RefreshCw, Send, Smile, Sparkles, Target, ThumbsDown, ThumbsUp, Users,
+  ArrowLeft, Briefcase, Dumbbell, Ear, FileText, Frown, Lightbulb, MessageCircle, Printer, RefreshCw, Smile, Sparkles, Target, ThumbsDown, ThumbsUp, Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -21,19 +21,17 @@ export default function ReportDetail() {
   const manager = useIsManager();
   const qc = useQueryClient();
   const toast = useToast();
-  const [tab, setTab] = useState<"report" | "email">("report");
   const q = useQuery({ queryKey: ["report", id], queryFn: () => api.get<{ report: any }>(`/reports/${id}`) });
   const calls = useQuery({
     queryKey: ["report-calls", id],
     queryFn: () => api.get<{ rows: any[] }>(`/calls?userId=${q.data!.report.user_id}&from=${encodeURIComponent(new Date(`${q.data!.report.report_date}T00:00:00+05:30`).toISOString())}&to=${encodeURIComponent(new Date(new Date(`${q.data!.report.report_date}T00:00:00+05:30`).getTime() + 86400_000).toISOString())}&pageSize=100`),
     enabled: Boolean(q.data?.report),
   });
-  const resend = useMutation({ mutationFn: () => api.post(`/reports/${id}/resend`), onSuccess: () => toast({ kind: "success", title: "Email queued", body: "Sending to every recipient again." }) });
   const rebuild = useMutation({ mutationFn: () => api.post(`/reports/${id}/rebuild`), onSuccess: () => { qc.invalidateQueries({ queryKey: ["report", id] }); toast({ kind: "ai", title: "Report rebuilt" }); } });
 
   if (q.isLoading) return <div className="space-y-4"><Skeleton className="h-48" /><Skeleton className="h-96" /></div>;
   const r = q.data?.report;
-  if (!r) return <Empty icon={<Mail className="size-6" />} title="Report not found" />;
+  if (!r) return <Empty icon={<FileText className="size-6" />} title="Report not found" />;
   const rep: DailyReport | null = r.report;
   const m = r.metrics ?? {};
   const base = `/${user?.portal}`;
@@ -56,7 +54,7 @@ export default function ReportDetail() {
             </div>
             <h1 className="mt-5 max-w-3xl text-2xl leading-snug font-bold tracking-tight sm:text-3xl">{rep?.headline ?? "Report not ready"}</h1>
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
-              {r.emailed_at && <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1"><Mail className="size-3.5" /> Emailed {fmtDateTime(r.emailed_at)} to {r.emailed_to.join(", ")}</span>}
+              {r.updated_at && rep && <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1"><FileText className="size-3.5" /> Written {fmtDateTime(r.updated_at)}</span>}
               <span className="rounded-full bg-white/10 px-3 py-1">{r.model === "demo-heuristic" ? "Demo analysis" : r.model === "metrics-only" ? "Metrics only" : `AI: ${r.model}`}</span>
             </div>
           </div>
@@ -67,24 +65,13 @@ export default function ReportDetail() {
         </div>
       </motion.section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={tab} onChange={setTab} items={[{ value: "report", label: "Report" }, { value: "email", label: "Email preview" }]} />
-        {manager && (
-          <div className="flex gap-2">
-            <Button size="sm" icon={<RefreshCw className="size-4" />} loading={rebuild.isPending} onClick={() => rebuild.mutate()}>Rebuild</Button>
-            <Button size="sm" variant="soft" icon={<Send className="size-4" />} loading={resend.isPending} onClick={() => resend.mutate()}>Email again</Button>
-          </div>
-        )}
+      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+        <Button size="sm" variant="ghost" icon={<Printer className="size-4" />} onClick={() => window.print()}>Print / save PDF</Button>
+        {manager && <Button size="sm" icon={<RefreshCw className="size-4" />} loading={rebuild.isPending} onClick={() => rebuild.mutate()}>Rebuild</Button>}
       </div>
 
       <AnimatePresence mode="wait">
-        {tab === "email" ? (
-          <motion.div key="email" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Card className="overflow-hidden p-0" spotlight={false}>
-              <iframe title="Email preview" src={`/api/reports/${id}/email`} className="h-[1400px] w-full bg-[#eef2f8]" />
-            </Card>
-          </motion.div>
-        ) : !rep ? (
+        {!rep ? (
           <Card><Empty icon={<Sparkles className="size-6" />} title="This report is still being written" /></Card>
         ) : (
           <motion.div key="report" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">

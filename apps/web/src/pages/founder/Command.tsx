@@ -157,7 +157,7 @@ export default function Command() {
         <div className="grid gap-3 px-5 pb-5 sm:grid-cols-2 lg:grid-cols-5">
           <Health ok={meta?.aiConfigured} label="AI call analysis" good="Claude connected" bad="Demo analysis — add ANTHROPIC_API_KEY" icon={<BrainCircuit className="size-4" />} />
           <Health ok={meta?.transcriptionConfigured} label="Transcription" good="Deepgram connected" bad="Add DEEPGRAM_API_KEY" icon={<Activity className="size-4" />} />
-          <Health ok={meta?.emailConfigured} label="Report emails" good="SMTP connected" bad="SMTP not set — saved to outbox" icon={<Mail className="size-4" />} />
+          <Health ok={meta?.emailConfigured} label="Alert emails" good="SMTP connected" bad="Optional — in-app alerts only" icon={<Mail className="size-4" />} />
           <Health ok={meta?.telephonyMode !== "demo" && (meta?.telephonyMode !== "bridge" || meta?.bridgeReady)} label="Calling" good={meta?.telephonyMode === "bridge" ? "Bridge calling (auto-record)" : "Phone Link"} bad={meta?.telephonyMode === "demo" ? "Demo mode" : "Bridge provider missing"} icon={<Phone className="size-4" />} />
           <Health ok={!(d?.jobs ?? []).some((j: any) => j.status === "failed")} label="Background jobs" good={`${(d?.jobs ?? []).filter((j: any) => j.status === "queued").reduce((a: number, j: any) => a + j.count, 0)} queued`} bad="Some jobs failed — see Settings" icon={<Handshake className="size-4" />} />
         </div>

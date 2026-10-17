@@ -19,7 +19,7 @@ import {
 import { founderDashboard, legionDashboard, objectionInsights, repDashboard, teamDashboard } from "../services/dashboards.js";
 import { enqueue, jobStats, retryFailed } from "../services/jobs.js";
 import { listMeetings, scheduleMeeting, updateMeeting } from "../services/meetings.js";
-import { buildReport, renderReportEmail, reportRecipients, runDailyReports } from "../services/reports.js";
+import { buildReport, runDailyReports } from "../services/reports.js";
 import { getAllSettings, putSetting, settingSchemas, type SettingKey } from "../services/settings.js";
 import { hrStatus } from "../services/hr.js";
 import { createTask, listTasks, updateTask } from "../services/tasks.js";
@@ -531,7 +531,7 @@ api.get("/reports", async (req, res) => {
   const userId = req.user!.role === "sales_rep" ? req.user!.id : f.userId ?? null;
   const rows = await db.many(
     `select r.id, r.user_id, r.report_date, r.status, r.metrics, r.report->>'headline' as headline, r.report->>'grade' as grade,
-       (r.report->>'overall_score')::int as overall_score, r.emailed_to, r.emailed_at, r.error, r.model,
+       (r.report->>'overall_score')::int as overall_score, r.error, r.model, r.updated_at,
        u.full_name, u.avatar_hue, u.employee_code
      from crm_daily_reports r join crm_users u on u.id = r.user_id
      where ($1::date is null or r.report_date = $1) and ($2::uuid is null or r.user_id = $2)
@@ -540,8 +540,6 @@ api.get("/reports", async (req, res) => {
   );
   res.json({ reports: rows });
 });
-
-api.get("/reports/recipients/preview", manager, async (_req, res) => res.json({ recipients: await reportRecipients() }));
 
 api.get("/reports/:id", async (req, res) => {
   const r = await db.maybe(
@@ -553,33 +551,17 @@ api.get("/reports/:id", async (req, res) => {
   res.json({ report: r });
 });
 
-api.get("/reports/:id/email", async (req, res) => {
-  const r = await db.maybe(
-    `select r.*, u.full_name, u.employee_code from crm_daily_reports r join crm_users u on u.id = r.user_id where r.id = $1`,
-    [parse(zId, req.params.id)],
-  );
-  if (!r?.report) throw notFound("Report not ready");
-  if (req.user!.role === "sales_rep" && r.user_id !== req.user!.id) throw forbidden();
-  res.type("html").send(renderReportEmail(r));
-});
-
 api.post("/reports/run", manager, async (req, res) => {
-  const body = parse(z.object({ date: zIsoDate.optional(), userIds: z.array(zId).optional(), email: z.boolean().default(true) }), req.body ?? {});
-  const out = await runDailyReports(body.date ?? todayLocal(), { userIds: body.userIds, email: body.email });
+  const body = parse(z.object({ date: zIsoDate.optional(), userIds: z.array(zId).optional() }), req.body ?? {});
+  const out = await runDailyReports(body.date ?? todayLocal(), { userIds: body.userIds });
   await audit({ id: req.user!.id, label: req.user!.full_name }, "reports.run", "daily_report", null, out);
   res.json(out);
-});
-
-api.post("/reports/:id/resend", manager, async (req, res) => {
-  const id = parse(zId, req.params.id);
-  await enqueue("report.email", { reportId: id });
-  res.json({ ok: true });
 });
 
 api.post("/reports/:id/rebuild", manager, async (req, res) => {
   const r = await db.maybe(`select user_id, report_date from crm_daily_reports where id = $1`, [parse(zId, req.params.id)]);
   if (!r) throw notFound("Report not found");
-  const id = await buildReport(r.user_id, r.report_date, { email: false });
+  const id = await buildReport(r.user_id, r.report_date);
   res.json({ id });
 });
 
@@ -593,40 +575,6 @@ api.put("/settings/:key", founder, async (req, res) => {
   const value = await putSetting(key, req.body, req.user!.id);
   await audit({ id: req.user!.id, label: req.user!.full_name }, "settings.update", "setting", key, value as any);
   res.json({ value });
-});
-
-api.get("/settings/recipients", manager, async (_req, res) => {
-  res.json({
-    recipients: await db.many(`select r.*, u.full_name as added_by_name from crm_report_recipients r left join crm_users u on u.id = r.added_by order by r.created_at`),
-    automatic: await db.many(`select full_name, email, role, title from crm_users where status = 'active' and role in ('founder','sales_head') order by role, full_name`),
-  });
-});
-
-api.post("/settings/recipients", founder, async (req, res) => {
-  const body = parse(z.object({ name: z.string().min(1).max(200), email: z.string().email(), label: z.string().max(60).default("Other") }), req.body);
-  const r = await db.one(
-    `insert into crm_report_recipients (name, email, label, added_by) values ($1, $2, $3, $4) returning *`,
-    [body.name, body.email.trim(), body.label, req.user!.id],
-  );
-  await audit({ id: req.user!.id, label: req.user!.full_name }, "recipients.add", "report_recipient", r.id, body);
-  res.json({ recipient: r });
-});
-
-api.patch("/settings/recipients/:id", founder, async (req, res) => {
-  const body = parse(z.object({ active: z.boolean().optional(), label: z.string().max(60).optional(), name: z.string().max(200).optional() }), req.body);
-  const r = await db.maybe(
-    `update crm_report_recipients set active = coalesce($2, active), label = coalesce($3, label), name = coalesce($4, name) where id = $1 returning *`,
-    [parse(zId, req.params.id), body.active ?? null, body.label ?? null, body.name ?? null],
-  );
-  if (!r) throw notFound();
-  res.json({ recipient: r });
-});
-
-api.delete("/settings/recipients/:id", founder, async (req, res) => {
-  const id = parse(zId, req.params.id);
-  await db.query(`delete from crm_report_recipients where id = $1`, [id]);
-  await audit({ id: req.user!.id, label: req.user!.full_name }, "recipients.remove", "report_recipient", id);
-  res.json({ ok: true });
 });
 
 api.get("/integrations/hr/status", founder, async (_req, res) => res.json(await hrStatus()));

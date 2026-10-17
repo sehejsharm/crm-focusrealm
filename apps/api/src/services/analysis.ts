@@ -6,6 +6,7 @@ import { env } from "../env.js";
 import { broadcast, publish } from "../lib/bus.js";
 import { activity, notify } from "../lib/record.js";
 import { heuristicAnalysis } from "./analysis-heuristic.js";
+import { GeminiError, geminiJson } from "./gemini.js";
 import type { Transcript } from "./transcription.js";
 
 /**
@@ -13,7 +14,7 @@ import type { Transcript } from "./transcription.js";
  * how the salesperson spoke and handled the conversation, how good the call
  * was against every major sales framework, and how the prospect responded.
  *
- * Claude returns a strictly-typed analysis (structured outputs), so the CRM
+ * Claude (or Gemini, see gemini.ts) returns a strictly-typed analysis, so the CRM
  * can chart it, aggregate it across the team and roll it into the daily
  * report. Uncertain findings are flagged for human review, never hidden.
  */
@@ -200,8 +201,8 @@ interface CallContext {
   previous_outcome: string | null;
 }
 
-async function claudeAnalysis(t: Transcript, ctx: CallContext): Promise<CallAnalysis> {
-  const content = `CRM context
+function analysisPrompt(t: Transcript, ctx: CallContext) {
+  return `CRM context
 - Call ID: ${ctx.call_code}
 - Salesperson: ${ctx.user_name}
 - Prospect: ${ctx.contact_name}${ctx.designation ? `, ${ctx.designation}` : ""}${ctx.company_name ? ` at ${ctx.company_name}` : ""}
@@ -212,7 +213,10 @@ async function claudeAnalysis(t: Transcript, ctx: CallContext): Promise<CallAnal
 
 Transcript (speaker labels are from automatic diarisation and may need mapping):
 ${formatTranscript(t)}`;
+}
 
+async function claudeAnalysis(t: Transcript, ctx: CallContext): Promise<CallAnalysis> {
+  const content = analysisPrompt(t, ctx);
   const msg = await anthropic().beta.messages.parse({
     model: env.aiModel,
     max_tokens: 16000,
@@ -228,7 +232,15 @@ ${formatTranscript(t)}`;
 
 export class NonRetryable extends Error {}
 
-export const aiConfigured = () => env.anthropicConfigured;
+/** Which model does the AI work right now ("" = none: demo analysis). */
+export function activeModel() {
+  if (env.aiProvider === "anthropic" && env.anthropicConfigured) return env.aiModel;
+  if (env.aiProvider === "gemini" && env.geminiApiKey) return env.geminiModel;
+  return "";
+}
+
+export const aiConfigured = () => Boolean(activeModel());
+const useGemini = () => env.aiProvider === "gemini";
 
 /** Analyse one call and store the results. Safe to run twice. */
 export async function analyzeCall(callId: string, opts: { notify?: boolean } = {}) {
@@ -252,8 +264,10 @@ export async function analyzeCall(callId: string, opts: { notify?: boolean } = {
   let model: string;
   try {
     if (aiConfigured()) {
-      analysis = await claudeAnalysis(transcript, call);
-      model = env.aiModel;
+      analysis = useGemini()
+        ? ((await geminiJson(CallAnalysisSchema, SYSTEM, [{ text: analysisPrompt(transcript, call) }])) as CallAnalysis)
+        : await claudeAnalysis(transcript, call);
+      model = activeModel();
     } else {
       analysis = heuristicAnalysis(transcript, call);
       model = "demo-heuristic";
@@ -261,6 +275,7 @@ export async function analyzeCall(callId: string, opts: { notify?: boolean } = {
   } catch (e) {
     const permanent =
       e instanceof NonRetryable ||
+      (e instanceof GeminiError && e.permanent) ||
       e instanceof Anthropic.BadRequestError ||
       e instanceof Anthropic.AuthenticationError ||
       e instanceof Anthropic.PermissionDeniedError ||
@@ -358,7 +373,7 @@ export const DailyReportSchema = z.object({
 
 export type DailyReport = z.infer<typeof DailyReportSchema>;
 
-const REPORT_SYSTEM = `You write the end-of-day sales performance report for one Focus Realm salesperson. It is emailed to the sales heads, the CEO and the COO, so it must be accurate, specific, and readable in two minutes. You receive the day's computed activity metrics and the AI analysis of each of the day's recorded calls.
+const REPORT_SYSTEM = `You write the end-of-day sales performance report for one Focus Realm salesperson. The founders, sales heads and the Legion team read it in the CRM, so it must be accurate, specific, and readable in two minutes. You receive the day's computed activity metrics and the AI analysis of each of the day's recorded calls.
 
 Ground every statement in the data provided. Use call IDs when you reference calls. Combine "how they spoke", "how they handled the conversation" and "how prospects responded" into clear patterns rather than repeating each call. Average the framework scores across analysed calls, and comment on what the trend means. Be fair: credit real progress, name real problems, and keep coaching actionable for tomorrow. If few calls were analysed, say so and temper conclusions.`;
 
@@ -394,22 +409,23 @@ export async function synthesiseDailyReport(input: {
         }
       : null,
   }));
-  const msg = await anthropic().beta.messages.parse({
-    model: env.aiModel,
-    max_tokens: 16000,
-    ...fallbackParams(),
-    output_config: { effort: env.aiEffort, format: betaZodOutputFormat(DailyReportSchema) },
-    system: REPORT_SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: `Salesperson: ${input.repName}\nDate: ${input.date}\n\nComputed metrics:\n${JSON.stringify(input.metrics, null, 2)}\n\nCalls:\n${JSON.stringify(compact, null, 2)}`,
-      },
-    ],
-  });
-  if (msg.stop_reason === "refusal") throw new NonRetryable("The AI declined to write this report");
-  if (!msg.parsed_output) throw new Error("The report was cut short — will retry");
-  const r = msg.parsed_output as DailyReport;
+  const content = `Salesperson: ${input.repName}\nDate: ${input.date}\n\nComputed metrics:\n${JSON.stringify(input.metrics, null, 2)}\n\nCalls:\n${JSON.stringify(compact, null, 2)}`;
+  let r: DailyReport;
+  if (useGemini()) {
+    r = await geminiJson(DailyReportSchema, REPORT_SYSTEM, [{ text: content }]);
+  } else {
+    const msg = await anthropic().beta.messages.parse({
+      model: env.aiModel,
+      max_tokens: 16000,
+      ...fallbackParams(),
+      output_config: { effort: env.aiEffort, format: betaZodOutputFormat(DailyReportSchema) },
+      system: REPORT_SYSTEM,
+      messages: [{ role: "user", content }],
+    });
+    if (msg.stop_reason === "refusal") throw new NonRetryable("The AI declined to write this report");
+    if (!msg.parsed_output) throw new Error("The report was cut short — will retry");
+    r = msg.parsed_output as DailyReport;
+  }
   r.overall_score = Math.round(clamp(r.overall_score, 0, 100));
-  return { report: r, model: env.aiModel };
+  return { report: r, model: activeModel() };
 }

@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { db, json } from "../db/index.js";
 import { env } from "../env.js";
+import { audioPart, geminiConfigured, geminiJson } from "./gemini.js";
 import { storage } from "./storage.js";
 import { queueAnalysisIfImmediate } from "./calls.js";
 
@@ -8,6 +10,8 @@ import { queueAnalysisIfImmediate } from "./calls.js";
  * Deepgram is used because it handles Indian English and Hindi–English
  * code-switching ("Hinglish") in one pass with diarisation. Which speaker is
  * the salesperson is decided later by the analyser, from what was said.
+ * Without a Deepgram key, Gemini transcribes instead (one free key for both
+ * transcription and analysis), with approximate timestamps.
  */
 
 export interface TranscriptUtterance {
@@ -26,7 +30,37 @@ export interface Transcript {
   roles?: Record<string, "rep" | "prospect">;
 }
 
-export const transcriptionConfigured = () => Boolean(env.deepgramApiKey);
+export const transcriptionConfigured = () => Boolean(env.deepgramApiKey) || (env.aiProvider === "gemini" && geminiConfigured());
+
+const GeminiTranscript = z.object({
+  language: z.string().describe("Main language(s), e.g. 'English' or 'Hindi-English mix'"),
+  utterances: z
+    .array(
+      z.object({
+        speaker: z.enum(["A", "B", "C"]).describe("A = whoever speaks first, B = the other person, C = anyone else"),
+        start: z.number().describe("Start time in seconds from the beginning of the recording"),
+        end: z.number().describe("End time in seconds"),
+        text: z.string().describe("Exactly what was said, in the original language (Hindi in Devanagari or romanised as spoken)"),
+      }),
+    )
+    .describe("Every turn of the conversation, in order"),
+});
+
+async function geminiTranscribe(audio: Buffer, mime: string): Promise<Transcript> {
+  const out = await geminiJson(
+    GeminiTranscript,
+    "You transcribe recorded sales phone calls between a salesperson and a prospect, often in Indian English, Hindi or a mix. Transcribe every word faithfully — don't summarise, translate or correct. Split by speaker turn and label the speakers consistently.",
+    [await audioPart(audio, mime), { text: "Transcribe this call recording." }],
+    { temperature: 0 },
+  );
+  return {
+    provider: `gemini:${env.geminiModel}`,
+    language: out.language,
+    utterances: out.utterances
+      .filter((u) => u.text.trim())
+      .map((u) => ({ speaker: u.speaker, start: +Math.max(0, u.start).toFixed(2), end: +Math.max(u.start, u.end).toFixed(2), text: u.text.trim() })),
+  };
+}
 
 async function deepgram(audio: Buffer | { url: string }, mime: string): Promise<Transcript> {
   const url = new URL("https://api.deepgram.com/v1/listen");
@@ -73,11 +107,13 @@ export async function transcribeCall(callId: string) {
     return;
   }
   await db.query(`update crm_calls set transcript_status = 'processing' where id = $1`, [callId]);
-  const signed = await storage.signedUrl(call.recording_path, 1800);
+  const mime = call.recording_mime ?? "audio/mpeg";
+  // Deepgram fetches the file itself from a signed URL; Gemini gets the bytes.
+  const signed = env.deepgramApiKey ? await storage.signedUrl(call.recording_path, 1800) : null;
   const audio = signed ? { url: signed } : await storage.read(call.recording_path);
   if (!audio) throw new Error(`Recording ${call.recording_path} is missing from storage`);
   try {
-    const transcript = await deepgram(audio, call.recording_mime ?? "audio/mpeg");
+    const transcript = env.deepgramApiKey ? await deepgram(audio, mime) : await geminiTranscribe(audio as Buffer, mime);
     const duration = transcript.utterances.at(-1)?.end;
     await db.query(
       `update crm_calls set transcript = $2::jsonb, transcript_status = 'done',

@@ -62,7 +62,7 @@ exportsRouter.get("/export/reports.csv", manager, async (req, res) => {
   const from = typeof req.query.from === "string" ? req.query.from : new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
   const rows = await db.many(
     `select r.report_date, u.full_name, u.employee_code, r.report->>'grade' as grade, (r.report->>'overall_score')::int as score,
-       r.metrics, r.report->>'headline' as headline, r.report->>'executive_summary' as summary, r.emailed_at
+       r.metrics, r.report->>'headline' as headline, r.report->>'executive_summary' as summary
      from crm_daily_reports r join crm_users u on u.id = r.user_id
      where r.report_date >= $1::date and r.report is not null order by r.report_date desc, u.full_name limit ${MAX_ROWS}`,
     [from],
@@ -70,7 +70,7 @@ exportsRouter.get("/export/reports.csv", manager, async (req, res) => {
   sendCsv(
     res,
     `focus-realm-daily-reports-${stamp()}.csv`,
-    ["Date", "Salesperson", "Employee ID", "Grade", "Score", "Calls", "Connected", "Connect %", "Talk time (min)", "Meetings booked", "Analysed calls", "Headline", "Summary", "Emailed"],
-    rows.map((r) => [r.report_date, r.full_name, r.employee_code, r.grade, r.score, r.metrics?.calls_total, r.metrics?.connected, r.metrics?.connect_rate, Math.round((r.metrics?.talk_time_sec ?? 0) / 60), r.metrics?.meetings_booked, r.metrics?.analysed, r.headline, r.summary, r.emailed_at]),
+    ["Date", "Salesperson", "Employee ID", "Grade", "Score", "Calls", "Connected", "Connect %", "Talk time (min)", "Meetings booked", "Analysed calls", "Headline", "Summary"],
+    rows.map((r) => [r.report_date, r.full_name, r.employee_code, r.grade, r.score, r.metrics?.calls_total, r.metrics?.connected, r.metrics?.connect_rate, Math.round((r.metrics?.talk_time_sec ?? 0) / 60), r.metrics?.meetings_booked, r.metrics?.analysed, r.headline, r.summary]),
   );
 });

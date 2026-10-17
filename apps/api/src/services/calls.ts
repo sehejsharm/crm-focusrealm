@@ -21,7 +21,7 @@ import { createTask } from "./tasks.js";
  *     pushed to their Phone Link screen — and the call is recorded.
  *  3. The recording is stored privately and transcribed.
  *  4. At the end of the day every recording is analysed by AI and rolled up
- *     into one report per salesperson, emailed to the leadership.
+ *     into one report per salesperson, shown in Daily Reports.
  */
 
 export const OUTCOMES = [

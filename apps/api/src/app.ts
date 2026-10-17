@@ -17,7 +17,7 @@ import { emailNotification } from "./services/alerts.js";
 import { analyzeCall } from "./services/analysis.js";
 import { fetchProviderRecording } from "./services/calls.js";
 import { registerJob } from "./services/jobs.js";
-import { buildReport, emailReport } from "./services/reports.js";
+import { buildReport } from "./services/reports.js";
 import { opportunisticMaintenance } from "./services/scheduler.js";
 import { storageOrigin } from "./services/storage.js";
 import { transcribeCall } from "./services/transcription.js";
@@ -44,8 +44,9 @@ export function ensureReady() {
     registerJob("recording.fetch", (p) => fetchProviderRecording(p));
     registerJob("call.transcribe", (p) => transcribeCall(p.callId));
     registerJob("call.analyze", async (p) => void (await analyzeCall(p.callId)));
-    registerJob("report.build", async (p) => void (await buildReport(p.userId, p.date, { email: p.email, queuedAt: p.queuedAt })));
-    registerJob("report.email", (p) => emailReport(p.reportId));
+    registerJob("report.build", async (p) => void (await buildReport(p.userId, p.date, { queuedAt: p.queuedAt })));
+    // Reports are no longer emailed; drains any email jobs queued before that change.
+    registerJob("report.email", async () => {});
     registerJob("notification.email", (p) => emailNotification(p.id));
   })().catch((e) => {
     ready = null; // let the next request retry instead of caching the failure

@@ -24,6 +24,8 @@ export interface Meta {
   telephonyMode: "phone_link" | "bridge" | "demo";
   bridgeReady: boolean;
   aiConfigured: boolean;
+  aiProvider: "anthropic" | "gemini" | null;
+  aiModel: string | null;
   transcriptionConfigured: boolean;
   emailConfigured: boolean;
   storage: string;

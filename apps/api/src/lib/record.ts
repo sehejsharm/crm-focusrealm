@@ -76,10 +76,11 @@ export async function notifyRoles(
   title: string,
   body?: string | null,
   link?: string | null,
+  except: string[] = [],
 ) {
   const people = await db.many<{ id: string }>(
-    `select id from crm_users where status = 'active' and role = any($1::text[])`,
-    [roles],
+    `select id from crm_users where status = 'active' and role = any($1::text[]) and not (id = any($2::uuid[]))`,
+    [roles, except],
   );
   await Promise.all(people.map((p) => notify(p.id, kind, title, body, link)));
 }
