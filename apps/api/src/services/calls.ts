@@ -381,7 +381,7 @@ export async function queueAnalysisIfImmediate(callId: string, force = false) {
   }
 }
 
-export async function listCalls(user: AuthUser, f: { userId?: string; contactId?: string; from?: string; to?: string; outcome?: string; analysis?: string; page: number; pageSize: number }) {
+export async function listCalls(user: AuthUser, f: { userId?: string; contactId?: string; from?: string; to?: string; outcome?: string; analysis?: string; recording?: "uploaded" | "missing"; page: number; pageSize: number }) {
   const where: string[] = [];
   const params: unknown[] = [];
   const add = (sql: string, v: unknown) => {
@@ -395,6 +395,8 @@ export async function listCalls(user: AuthUser, f: { userId?: string; contactId?
   if (f.to) add("k.started_at < ?", f.to);
   if (f.outcome) add("k.outcome = ?", f.outcome);
   if (f.analysis) add("k.analysis_status = ?", f.analysis);
+  if (f.recording === "uploaded") where.push("k.recording_status = 'uploaded'");
+  if (f.recording === "missing") add("k.mode <> 'demo' and k.recording_status in ('none','awaiting','failed') and k.outcome = any(?::text[])", CONNECTED);
   const w = where.length ? `where ${where.join(" and ")}` : "";
   const total = await db.one<{ n: number }>(`select count(*) as n ${CALL_FROM} ${w}`, params);
   params.push(f.pageSize, (f.page - 1) * f.pageSize);

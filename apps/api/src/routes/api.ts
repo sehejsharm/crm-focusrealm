@@ -330,6 +330,7 @@ api.get("/calls", async (req, res) => {
       to: z.string().optional(),
       outcome: z.string().optional(),
       analysis: z.string().optional(),
+      recording: z.enum(["uploaded", "missing"]).optional(),
     }),
     req.query,
   );

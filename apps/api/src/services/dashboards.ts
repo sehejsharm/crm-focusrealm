@@ -101,7 +101,9 @@ export async function teamDashboard(date = todayLocal()) {
        (select count(*) from crm_contacts c where c.owner_id = u.id and c.status in ${ACTIVE_STATUSES})::int as active_prospects,
        (select count(*) from crm_tasks t where t.assigned_to = u.id and t.status = 'open' and t.due_at < now())::int as overdue,
        (select r.id from crm_daily_reports r where r.user_id = u.id and r.report_date = $3) as report_id,
-       (select r.report->>'grade' from crm_daily_reports r where r.user_id = u.id and r.report_date = $3) as report_grade
+       (select r.report->>'grade' from crm_daily_reports r where r.user_id = u.id and r.report_date = $3) as report_grade,
+       exists (select 1 from crm_calls l where l.user_id = u.id and l.status in ('initiated','ringing','in_progress')
+               and l.outcome is null and l.started_at > now() - interval '30 minutes') as on_call
      from crm_users u left join crm_calls k on k.user_id = u.id and k.started_at >= $1 and k.started_at < $2
      where u.role in ('sales_rep','sales_head') and u.status = 'active'
      group by u.id order by calls desc, u.full_name`,
@@ -127,7 +129,7 @@ export async function founderDashboard() {
     db.many(`select stage, count(*)::int as count from crm_contacts where status not in ('disqualified') group by stage`),
     db.many(`select status, count(*)::int as count from crm_contacts group by status`),
     db.many(
-      `select coalesce(campaign, '—') as name, count(*)::int as total,
+      `select coalesce(nullif(campaign, ''), 'No campaign') as name, count(*)::int as total,
          count(*) filter (where stage <> 'prospect')::int as qualified_plus,
          count(*) filter (where stage in ('legion_meet_1','legion_meet_2'))::int as legion,
          count(*) filter (where status = 'closed_won')::int as won
@@ -180,13 +182,31 @@ export async function founderDashboard() {
     ),
     db.many(`select kind, status, count(*)::int as count from crm_jobs where status in ('queued','failed','running') group by kind, status`),
     db.many(
-      `select m.id, m.stage, m.scheduled_at, c.full_name as contact_name, co.name as company_name, l.full_name as legion_name
+      `select m.id, m.stage, m.scheduled_at, m.contact_id, c.full_name as contact_name, co.name as company_name, l.full_name as legion_name
        from crm_meetings m join crm_contacts c on c.id = m.contact_id left join crm_companies co on co.id = c.company_id
-       left join crm_users l on l.id = m.legion_user_id where m.status = 'scheduled' and m.scheduled_at >= now() order by m.scheduled_at limit 8`,
+       left join crm_users l on l.id = m.legion_user_id where m.status = 'scheduled' and m.scheduled_at >= now() order by m.scheduled_at limit 30`,
     ),
     db.one(`select count(*)::int as n from crm_handoffs where status = 'pending'`),
   ]);
-  const { staleDays } = await getSetting("allocation");
+  const { staleDays, autoEnabled } = await getSetting("allocation");
+  // The same 30 days before, for the trend arrows.
+  const prevRates = await db.one(
+    `select count(*)::int as calls, count(*) filter (where outcome in ${connectedList})::int as connected,
+       count(*) filter (where outcome = 'meeting_booked')::int as meetings,
+       count(*) filter (where analysis->'prospect'->>'decision_maker' = 'yes')::int as decision_maker_reached,
+       count(*) filter (where analysis is not null)::int as analysed
+     from crm_calls where started_at >= $1 and started_at < $2`,
+    [new Date(monthStart.getTime() - 30 * 86400_000), monthStart],
+  );
+  // What a founder should look at today, in one place.
+  const attention = await db.one(
+    `select
+       (select count(*) from crm_calls where analysis_status = 'needs_review')::int as reviews,
+       (select count(*) from crm_calls where mode <> 'demo' and recording_status in ('none','awaiting','failed')
+          and outcome in ${connectedList} and started_at > now() - interval '7 days')::int as missing_recordings,
+       (select count(*) from crm_daily_reports where status = 'failed' and report_date >= current_date - 2)::int as failed_reports,
+       (select count(*) from crm_jobs where status = 'failed')::int as failed_jobs`,
+  );
   const stale = await db.one<{ n: number }>(`select count(*)::int as n from crm_contacts c where ${STALE_SQL.replace("$STALE", "$1")}`, [staleDays]);
   const followUpCompliance = await db.one(
     `select count(*) filter (where status = 'done')::int as done, count(*) filter (where status = 'missed')::int as missed
@@ -197,12 +217,13 @@ export async function founderDashboard() {
     funnel, statusCounts, byCampaign, bySegment, byRep, overdue: overdue.n, unassigned: unassigned.n,
     objectionTrend, productFeedback, frameworkAvg, rates, followUpCompliance, jobs, meetingsUpcoming,
     handoffsPending: handoffsPending.n, stale: stale.n, staleDays, series: await dailySeries(null, 30),
+    prevRates, attention: { ...attention, autoTopUp: autoEnabled },
   };
 }
 
 /** Legion portal: their pipeline, meetings, inbox, and the sales team's work. */
 export async function legionDashboard(user: AuthUser) {
-  const [pipeline, handoffs, meetings, team, mine] = await Promise.all([
+  const [pipeline, handoffs, meetings, team, mine, won] = await Promise.all([
     db.many(`select stage, count(*)::int as count from crm_contacts where stage in ('qualified','legion_meet_1','legion_meet_2') and status not in ('closed_lost') group by stage`),
     db.many(
       `select h.*, c.full_name as contact_name, c.designation, c.temperature, co.name as company_name, f.full_name as from_name, f.avatar_hue as from_hue
@@ -213,7 +234,7 @@ export async function legionDashboard(user: AuthUser) {
       `select m.*, c.full_name as contact_name, co.name as company_name, s.full_name as sales_name
        from crm_meetings m join crm_contacts c on c.id = m.contact_id left join crm_companies co on co.id = c.company_id
        left join crm_users s on s.id = m.sales_user_id
-       where m.status = 'scheduled' and m.scheduled_at >= now() - interval '1 day' order by m.scheduled_at limit 20`,
+       where m.status = 'scheduled' and m.scheduled_at >= now() - interval '2 hours' order by m.scheduled_at limit 40`,
     ),
     teamDashboard(),
     db.one(
@@ -222,8 +243,13 @@ export async function legionDashboard(user: AuthUser) {
        from crm_contacts where legion_owner_id = $1`,
       [user.id],
     ),
+    db.one(
+      `select count(*) filter (where status = 'closed_won')::int as total,
+         count(*) filter (where status = 'closed_won' and updated_at > now() - interval '30 days')::int as month
+       from crm_contacts`,
+    ),
   ]);
-  return { pipeline, handoffs, meetings, team, mine };
+  return { pipeline, handoffs, meetings, team, mine, won };
 }
 
 export async function objectionInsights(days = 30) {
