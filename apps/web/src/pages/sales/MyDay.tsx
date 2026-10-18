@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { AlarmClock, ArrowRight, Flame, Medal, PhoneCall, PhoneIncoming, Rocket, Sparkles, Timer, Trophy, Zap } from "lucide-react";
+import { AlarmClock, ArrowRight, Flame, Medal, Mic, PhoneCall, PhoneIncoming, Rocket, Sparkles, Timer, Trophy, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CallButton } from "../../components/call";
@@ -45,6 +45,9 @@ export default function MyDay() {
               <HeroChip icon={<PhoneIncoming className="size-3.5" />} label="Connected" value={d?.kpi.connected_today} />
               <HeroChip icon={<Rocket className="size-3.5" />} label="Meetings" value={d?.kpi.meetings_today} />
             </div>
+            <Link to="/sales/sprint" className="group mt-5 inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-brand-700 shadow-lg transition hover:shadow-xl active:scale-[0.98]">
+              <Zap className="size-4 text-amber-500" /> Start a Call Sprint <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+            </Link>
           </div>
           <div className="relative mx-auto md:mx-0">
             <div className="relative grid size-40 place-items-center">
@@ -63,6 +66,8 @@ export default function MyDay() {
           </div>
         </div>
       </motion.section>
+
+      <MissingRecordings />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -205,5 +210,24 @@ function HeroChip({ icon, label, value }: { icon: ReactNode; label: string; valu
       <span className="font-bold"><Counter value={value ?? 0} /></span>
       <span className="text-white/70">{label}</span>
     </span>
+  );
+}
+
+/** A nudge when connected calls still have no recording — no recording, no AI coaching. */
+function MissingRecordings() {
+  const q = useQuery({ queryKey: ["recordings"], queryFn: () => api.get<{ waiting: unknown[] }>("/calls/recordings"), refetchInterval: 60_000 });
+  const n = q.data?.waiting.length ?? 0;
+  if (!n) return null;
+  return (
+    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
+      <Link to="/sales/recordings" className="group flex items-center gap-3 rounded-2xl border border-amber-200 bg-warning-soft px-4 py-3 transition hover:shadow-sm dark:border-amber-900">
+        <span className="grid size-9 place-items-center rounded-xl bg-warning text-white"><Mic className="size-4" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-fg">{n} call{n === 1 ? "" : "s"} waiting for a recording</span>
+          <span className="block text-xs text-muted">Upload them so the AI can coach you and they count in tonight's report.</span>
+        </span>
+        <ArrowRight className="size-4 text-muted transition group-hover:translate-x-0.5" />
+      </Link>
+    </motion.div>
   );
 }

@@ -1,11 +1,9 @@
 import { db, json } from "../db/index.js";
-import { env } from "../env.js";
 import { publish } from "../lib/bus.js";
-import { audit, notify } from "../lib/record.js";
+import { notify, notifyRoles } from "../lib/record.js";
 import { dayBounds, formatDuration, todayLocal } from "../lib/time.js";
 import { analyzeCall, FRAMEWORKS, synthesiseDailyReport, type CallAnalysis, type DailyReport } from "./analysis.js";
 import { CONNECTED } from "./calls.js";
-import { sendMail } from "./email.js";
 import { DeferJob, enqueue } from "./jobs.js";
 import { getSetting } from "./settings.js";
 import { transcribeCall, transcriptionConfigured } from "./transcription.js";
@@ -14,8 +12,9 @@ import { transcribeCall, transcriptionConfigured } from "./transcription.js";
  * The end-of-day run (the founders' sales journey):
  *  1. Every recording a salesperson made today is transcribed and analysed.
  *  2. One report per salesperson is written from those analyses + metrics.
- *  3. Each report is emailed to the sales heads, the CEO and COO (founders)
- *     and anyone else the founders have added as a recipient.
+ *  3. Each report appears in Daily Reports for the founders, sales heads and
+ *     Legion, who get an in-app notification when it's ready. Nothing is
+ *     emailed.
  */
 
 export async function computeMetrics(userId: string, date: string) {
@@ -91,7 +90,7 @@ export async function computeMetrics(userId: string, date: string) {
 }
 
 /** Builds (or rebuilds) one salesperson's report for a day. */
-export async function buildReport(userId: string, date: string, opts: { email?: boolean; queuedAt?: string } = {}) {
+export async function buildReport(userId: string, date: string, opts: { queuedAt?: string } = {}) {
   // Queued by the end-of-day run: wait (up to 40 minutes) for that day's
   // transcriptions and analyses, which run in parallel as their own jobs.
   if (opts.queuedAt && Date.now() - Date.parse(opts.queuedAt) < 40 * 60_000) {
@@ -151,7 +150,7 @@ export async function buildReport(userId: string, date: string, opts: { email?: 
     );
     publish(userId, { type: "report.ready", data: { id: row.id, date } });
     await notify(userId, "report", `Your daily report for ${date} is ready`, report.headline, `/sales/coaching`);
-    if (opts.email !== false) await enqueue("report.email", { reportId: row.id }, { dedupeKey: `email:${row.id}` });
+    await notifyRoles(["founder", "sales_head", "legion"], "report", `${user.full_name}'s daily report · ${report.grade}`, report.headline, `/founder/reports/${row.id}`, [userId]);
     return row.id as string;
   } catch (e) {
     await db.query(`update crm_daily_reports set status = 'failed', error = $3, updated_at = now() where user_id = $1 and report_date = $2`, [
@@ -161,47 +160,8 @@ export async function buildReport(userId: string, date: string, opts: { email?: 
   }
 }
 
-/** Everyone a report goes to: founders + sales heads + the founders' list (+ the rep, if enabled). */
-export async function reportRecipients(repUserId?: string) {
-  const s = await getSetting("reports");
-  const people = await db.many<{ email: string; role: string }>(
-    `select email, role from crm_users where status = 'active' and email is not null and email <> ''
-       and ((role = 'founder' and $1) or (role = 'sales_head' and $2) or (id = $3 and $4))`,
-    [s.includeFounders, s.includeSalesHeads, repUserId ?? null, s.sendRepCopy],
-  );
-  const extra = await db.many<{ email: string }>(`select email from crm_report_recipients where active`);
-  const all = [...people.map((p) => p.email), ...extra.map((e) => e.email)];
-  return [...new Map(all.map((e) => [e.toLowerCase(), e])).values()];
-}
-
-export async function emailReport(reportId: string) {
-  const r = await db.maybe(
-    `select r.*, u.full_name, u.employee_code, u.title from crm_daily_reports r join crm_users u on u.id = r.user_id where r.id = $1`,
-    [reportId],
-  );
-  if (!r || !r.report) return;
-  const to = await reportRecipients(r.user_id);
-  if (!to.length) {
-    await db.query(`update crm_daily_reports set error = 'No recipients configured' where id = $1`, [reportId]);
-    return;
-  }
-  const html = renderReportEmail(r);
-  const res = await sendMail({
-    to,
-    subject: `Daily sales report · ${r.full_name} · ${r.report_date} · ${r.report.grade}`,
-    html,
-    text: `${r.report.headline}\n\n${r.report.executive_summary}\n\nOpen the full report: ${env.appUrl}/founder/reports/${r.id}`,
-  });
-  await db.query(
-    `update crm_daily_reports set status = 'emailed', emailed_to = $2::text[], emailed_at = now(),
-       error = $3 where id = $1`,
-    [reportId, to, res.delivered ? null : `SMTP not configured — saved to outbox (${res.file})`],
-  );
-  await audit(null, "report.emailed", "daily_report", reportId, { to, via: res.via });
-}
-
 /** Queue every salesperson's report for a date (the scheduler calls this). */
-export async function runDailyReports(date = todayLocal(), opts: { userIds?: string[]; email?: boolean } = {}) {
+export async function runDailyReports(date = todayLocal(), opts: { userIds?: string[] } = {}) {
   const { from, to } = dayBounds(date);
   const people = await db.many<{ id: string }>(
     `select u.id from crm_users u where u.role in ('sales_rep','sales_head')
@@ -236,93 +196,10 @@ export async function runDailyReports(date = todayLocal(), opts: { userIds?: str
   // 2. One report per salesperson, written once their calls are analysed.
   const queuedAt = new Date().toISOString();
   for (const p of people) {
-    await enqueue("report.build", { userId: p.id, date, email: opts.email !== false, queuedAt }, {
+    await enqueue("report.build", { userId: p.id, date, queuedAt }, {
       dedupeKey: `report:${p.id}:${date}`,
       runAt: new Date(Date.now() + 3000),
     });
   }
   return { date, queued: people.length, analyses };
-}
-
-// --------------------------------------------------------------- the email
-
-const esc = (s: unknown) =>
-  String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]!);
-
-function bar(value: number, max = 10) {
-  const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  const color = pct >= 70 ? "#0f9d6b" : pct >= 50 ? "#1a6ae0" : pct >= 35 ? "#c27a06" : "#d93a4a";
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
-    <td style="background:#eef2f8;border-radius:6px;height:8px;padding:0"><div style="width:${pct}%;height:8px;border-radius:6px;background:${color}"></div></td>
-  </tr></table>`;
-}
-
-function list(items: string[] | undefined, color = "#1a6ae0") {
-  if (!items?.length) return `<p style="margin:0;color:#8492a7;font-size:14px">—</p>`;
-  return items.map((i) => `<p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#0a1426"><span style="color:${color};font-weight:700">●</span>&nbsp; ${esc(i)}</p>`).join("");
-}
-
-function section(title: string, body: string) {
-  return `<tr><td style="padding:22px 32px 4px"><p style="margin:0 0 12px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#1655c0">${esc(title)}</p>${body}</td></tr>`;
-}
-
-export function renderReportEmail(r: { id: string; full_name: string; employee_code: string; report_date: string; metrics: any; report: DailyReport; model?: string }) {
-  const m = r.metrics;
-  const rep = r.report;
-  const kpi = (label: string, value: string) =>
-    `<td width="25%" style="padding:6px"><div style="background:#f5f8fd;border:1px solid #e3e8f0;border-radius:14px;padding:14px 12px;text-align:center">
-      <div style="font-size:22px;font-weight:800;color:#0a1426">${esc(value)}</div>
-      <div style="font-size:11px;color:#4b5a72;margin-top:4px;text-transform:uppercase;letter-spacing:.06em">${esc(label)}</div></div></td>`;
-  const frameworks = (rep.framework_breakdown ?? [])
-    .map((f) => `<tr><td style="padding:6px 0;font-size:13px;color:#0a1426;width:120px">${esc(f.framework)}</td><td style="padding:6px 10px">${bar(f.score)}</td><td style="padding:6px 0;font-size:13px;font-weight:700;color:#0a1426;width:36px;text-align:right">${Number(f.score).toFixed(1)}</td></tr>
-      <tr><td></td><td colspan="2" style="padding:0 10px 8px;font-size:12px;color:#4b5a72">${esc(f.comment)}</td></tr>`)
-    .join("");
-  const coaching = (rep.coaching_plan ?? [])
-    .map((c) => `<div style="border:1px solid #dcebfe;background:#f5f9ff;border-radius:14px;padding:14px 16px;margin-bottom:10px">
-      <div style="font-size:14px;font-weight:700;color:#0a1426">${esc(c.focus)}</div>
-      <div style="font-size:13px;color:#4b5a72;margin-top:4px">${esc(c.drill)}</div>
-      <div style="font-size:13px;color:#1655c0;margin-top:8px;font-style:italic">${esc(c.example_line)}</div></div>`)
-    .join("");
-  const objections = (rep.objection_summary ?? [])
-    .map((o) => `<span style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;border-radius:999px;background:#eaf3ff;color:#1655c0;font-size:12px;font-weight:600">${esc(o.category.replace(/_/g, " "))} × ${o.count} · ${esc(o.handling)}</span>`)
-    .join("");
-
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(rep.headline)}</title></head>
-<body style="margin:0;padding:0;background:#eef2f8;font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;padding:24px 12px"><tr><td align="center">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 10px 30px rgba(10,20,38,.08)">
-  <tr><td style="background:linear-gradient(135deg,#0b2a66 0%,#1655c0 55%,#2f86f0 100%);background-color:#1655c0;padding:28px 32px">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td><img src="${env.appUrl}/brand/focus-realm-mark.png" width="40" height="40" alt="Focus Realm" style="display:block;border-radius:10px;background:#fff;padding:4px"></td>
-      <td align="right" style="color:#cfe3ff;font-size:12px;letter-spacing:.08em;text-transform:uppercase">Daily Sales Report<br><span style="color:#fff;font-weight:700">${esc(r.report_date)}</span></td>
-    </tr></table>
-    <p style="margin:22px 0 4px;color:#cfe3ff;font-size:13px">${esc(r.full_name)} · ${esc(r.employee_code)}</p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td style="color:#ffffff;font-size:22px;font-weight:800;line-height:1.3">${esc(rep.headline)}</td>
-      <td width="84" align="right" valign="top"><div style="width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);text-align:center">
-        <div style="font-size:28px;font-weight:900;color:#fff;line-height:50px">${esc(rep.grade)}</div><div style="font-size:11px;color:#cfe3ff;margin-top:-10px">${rep.overall_score}/100</div></div></td>
-    </tr></table>
-  </td></tr>
-  <tr><td style="padding:18px 26px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-    ${kpi("Calls", `${m.calls_total}/${m.target}`)}${kpi("Connected", `${m.connected} · ${m.connect_rate}%`)}${kpi("Talk time", m.talk_time)}${kpi("Meetings", String(m.meetings_booked))}
-  </tr></table></td></tr>
-  ${section("Executive summary", `<p style="margin:0;font-size:15px;line-height:1.6;color:#0a1426">${esc(rep.executive_summary)}</p>`)}
-  <tr><td style="padding:12px 32px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-    <td width="50%" valign="top" style="padding-right:10px"><p style="margin:0 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#0f9d6b">Wins</p>${list(rep.wins, "#0f9d6b")}</td>
-    <td width="50%" valign="top" style="padding-left:10px"><p style="margin:0 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#d93a4a">Concerns</p>${list(rep.concerns, "#d93a4a")}</td>
-  </tr></table></td></tr>
-  ${section("How they spoke", `<p style="margin:0;font-size:14px;line-height:1.6;color:#0a1426">${esc(rep.communication)}</p>`)}
-  ${section("How they handled conversations", `<p style="margin:0;font-size:14px;line-height:1.6;color:#0a1426">${esc(rep.conversation_handling)}</p>`)}
-  ${section("How prospects responded", `<p style="margin:0;font-size:14px;line-height:1.6;color:#0a1426">${esc(rep.prospect_response)}</p>`)}
-  ${section("Sales frameworks", `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${frameworks}</table>`)}
-  ${objections ? section("Objections heard", objections) : ""}
-  ${section("Best & toughest call", `<p style="margin:0 0 8px;font-size:14px;color:#0a1426"><b style="color:#0f9d6b">${esc(rep.best_call?.call_code)}</b> — ${esc(rep.best_call?.why)}</p><p style="margin:0;font-size:14px;color:#0a1426"><b style="color:#d93a4a">${esc(rep.toughest_call?.call_code)}</b> — ${esc(rep.toughest_call?.why)}</p>`)}
-  ${section("Coaching plan for tomorrow", coaching || list([]))}
-  ${rep.product_feedback?.length ? section("Product feedback from prospects", list(rep.product_feedback)) : ""}
-  ${section("Actions for the sales head", list(rep.manager_actions))}
-  <tr><td style="padding:24px 32px 30px" align="center">
-    <a href="${env.appUrl}/founder/reports/${r.id}" style="display:inline-block;background:#1a6ae0;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 26px;border-radius:12px">Open the full report & recordings</a>
-    <p style="margin:18px 0 0;font-size:11px;color:#8492a7">${m.analysed} of ${m.calls_total} calls analysed${r.model ? ` · ${esc(r.model === "demo-heuristic" ? "demo analysis (no AI key)" : r.model)}` : ""} · Focus Realm CRM</p>
-  </td></tr>
-</table></td></tr></table></body></html>`;
 }

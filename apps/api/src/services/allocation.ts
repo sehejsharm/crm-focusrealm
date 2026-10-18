@@ -196,14 +196,15 @@ export async function previewAllocation(req: AllocationRequest) {
   };
 }
 
-export async function runAllocation(actor: AuthUser, req: AllocationRequest) {
+/** actor = null for the automatic morning top-up. */
+export async function runAllocation(actor: AuthUser | null, req: AllocationRequest) {
   const preview = await previewAllocation(req);
   const settings = { ...req, batchSize: preview.batchSize, maxActive: preview.maxActive };
 
   const result = await db.tx(async (q) => {
     const batch = await db.one<{ id: string }>(
       `insert into crm_allocation_batches (initiated_by, settings, settings_version) values ($1, $2::jsonb, 1) returning id`,
-      [actor.id, json(settings)],
+      [actor?.id ?? null, json(settings)],
       q,
     );
     const done: { contactId: string; userId: string }[] = [];
@@ -223,9 +224,9 @@ export async function runAllocation(actor: AuthUser, req: AllocationRequest) {
       }
       await q.query(
         `insert into crm_assignments (contact_id, user_id, batch_id, assigned_by, kind) values ($1, $2, $3, $4, 'allocation')`,
-        [a.contactId, a.userId, batch.id, actor.id],
+        [a.contactId, a.userId, batch.id, actor?.id ?? null],
       );
-      await activity(a.contactId, actor.id, "assignment", "Assigned in allocation batch", null, { userId: a.userId, batchId: batch.id }, q);
+      await activity(a.contactId, actor?.id ?? null, "assignment", actor ? "Assigned in allocation batch" : "Assigned in the morning top-up", null, { userId: a.userId, batchId: batch.id }, q);
       done.push(a);
     }
     const perUser: Record<string, number> = {};
@@ -242,7 +243,7 @@ export async function runAllocation(actor: AuthUser, req: AllocationRequest) {
       done.length,
       json(summary),
     ]);
-    await audit({ id: actor.id, label: actor.full_name }, "allocation.run", "allocation_batch", batch.id, { settings, summary }, q);
+    await audit(actor ? { id: actor.id, label: actor.full_name } : { label: "Auto top-up" }, actor ? "allocation.run" : "allocation.auto", "allocation_batch", batch.id, { settings, summary }, q);
     return { batchId: batch.id, ...summary };
   });
 
@@ -251,6 +252,22 @@ export async function runAllocation(actor: AuthUser, req: AllocationRequest) {
     await notify(userId, "allocation", `${n} new prospect${n === 1 ? "" : "s"} assigned to you`, "They're waiting in My Day. Go get them.", "/sales/prospects?filter=new");
   }
   return result;
+}
+
+/** Every active salesperson (not sales heads — they're topped up only when picked by hand). */
+export async function activeSalespeople() {
+  return (await db.many<{ id: string }>(`select id from crm_users where status = 'active' and role = 'sales_rep' order by full_name`)).map((u) => u.id);
+}
+
+/**
+ * The morning top-up: everyone gets up to the batch size of fresh prospects
+ * from the unassigned pool (oldest imports first), never above their limit.
+ * Returns null when there's nobody to give prospects to.
+ */
+export async function autoTopUp() {
+  const userIds = await activeSalespeople();
+  if (!userIds.length) return null;
+  return runAllocation(null, { userIds });
 }
 
 /** Manual reassignment. A reason is required; history is preserved. */

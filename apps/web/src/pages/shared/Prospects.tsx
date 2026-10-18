@@ -77,7 +77,7 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
             {manager && scope === "all" && (
               <>
                 <Button variant="ghost" icon={<Download className="size-4" />} onClick={() => window.location.assign("/api/export/prospects.csv")}>Export</Button>
-                <Button variant="soft" icon={<UploadCloud className="size-4" />} onClick={() => setImporting(true)}>Import CSV</Button>
+                <Button variant="soft" icon={<UploadCloud className="size-4" />} onClick={() => setImporting(true)}>Import Excel / CSV</Button>
               </>
             )}
             <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>Add prospect</Button>

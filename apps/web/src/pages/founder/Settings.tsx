@@ -1,29 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, Link2, Mail, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
+  BrainCircuit, CheckCircle2, ClipboardCheck, Cpu, FileText, Link2, Mail, MessageCircle, Phone, Plus, RotateCcw, Shuffle, Smartphone, Trash2, X, Zap,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useToast } from "../../components/toast";
 import { Avatar, Badge, Button, Card, CardHeader, Field, Input, PageHeader, Select, Skeleton, Switch, Tabs, Textarea } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, cn, ROLE_LABEL } from "../../lib/format";
 
-type Section = "reports" | "calling" | "hr" | "allocation" | "qualification" | "system";
+type Section = "reports" | "calling" | "hr" | "allocation" | "qualification" | "system" | "whatsapp";
 
 export default function Settings() {
-  const [section, setSection] = useState<Section>("reports");
+  const [params] = useSearchParams();
+  const [section, setSection] = useState<Section>((params.get("tab") as Section) || "reports");
   const q = useQuery({ queryKey: ["settings"], queryFn: () => api.get<{ settings: any }>("/settings") });
   return (
     <div>
       <PageHeader eyebrow="Admin" title="Settings" subtitle="Founders control how the CRM behaves. Every change is written to the audit log." />
       <Tabs className="mb-5" value={section} onChange={setSection} items={[
-        { value: "reports", label: "📧 Daily reports" },
+        { value: "reports", label: "📊 Daily reports" },
         { value: "calling", label: "📞 Calling & recording" },
         { value: "hr", label: "🔗 HR console" },
         { value: "allocation", label: "🔀 Allocation" },
         { value: "qualification", label: "✅ Qualification" },
+        { value: "whatsapp", label: "💬 WhatsApp" },
         { value: "system", label: "⚙️ System" },
       ]} />
       {!q.data ? <Skeleton className="h-96" /> : (
@@ -34,6 +37,7 @@ export default function Settings() {
             {section === "hr" && <HrSettings value={q.data.settings.hr} />}
             {section === "allocation" && <AllocationSettings value={q.data.settings.allocation} />}
             {section === "qualification" && <QualificationSettings value={q.data.settings.qualification} />}
+            {section === "whatsapp" && <WhatsAppSettings value={q.data.settings.whatsapp} />}
             {section === "system" && <SystemSettings />}
           </motion.div>
         </AnimatePresence>
@@ -50,6 +54,7 @@ function useSave(key: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settings"] });
       qc.invalidateQueries({ queryKey: ["meta"] });
+      qc.invalidateQueries({ queryKey: ["whatsapp-templates"] });
       toast({ kind: "success", title: "Settings saved" });
     },
     onError: (e) => toast({ kind: "error", title: "Couldn't save", body: (e as Error).message }),
@@ -73,76 +78,32 @@ function ReportsSettings({ value }: { value: any }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]">
       <Card spotlight={false}>
-        <CardHeader title="End-of-day run" subtitle="Analyse every recording, write one report per salesperson, email it" icon={<BrainCircuit className="size-4" />} />
+        <CardHeader title="End-of-day run" subtitle="Analyse every recording and write one report per salesperson" icon={<BrainCircuit className="size-4" />} />
         <Row title="Daily reports" body="Turn the automatic evening run on or off."><Switch checked={v.enabled} onChange={(x) => set("enabled", x)} /></Row>
-        <Row title="Run time (IST)" body="When the analysis and emails start. On Vercel, the cron in vercel.json also triggers at 20:00 IST."><Input type="time" value={v.time} onChange={(e) => set("time", e.target.value)} className="w-32" /></Row>
+        <Row title="Run time (IST)" body="When the analysis starts. On Vercel, the cron in vercel.json also triggers at 20:00 IST."><Input type="time" value={v.time} onChange={(e) => set("time", e.target.value)} className="w-32" /></Row>
         <Row title="When to analyse calls" body="End of day matches your journey: all of the day's recordings are analysed together in the evening. Immediate also gives reps coaching minutes after each call.">
           <Select value={v.analysisMode} onChange={(e) => set("analysisMode", e.target.value)} className="w-44"><option value="end_of_day">End of day</option><option value="immediate">Immediately + end of day</option></Select>
         </Row>
         <Row title="Skip days with no calls" body="No empty reports on holidays."><Switch checked={v.skipEmptyDays} onChange={(x) => set("skipEmptyDays", x)} /></Row>
-        <CardHeader title="Who receives every report" icon={<Mail className="size-4" />} />
-        <Row title="Founders (CEO, COO…)" body="Every active founder with an email address."><Switch checked={v.includeFounders} onChange={(x) => set("includeFounders", x)} /></Row>
-        <Row title="Sales heads" body="Every active sales head."><Switch checked={v.includeSalesHeads} onChange={(x) => set("includeSalesHeads", x)} /></Row>
-        <Row title="The salesperson themself" body="Each person also gets their own report."><Switch checked={v.sendRepCopy} onChange={(x) => set("sendRepCopy", x)} /></Row>
         <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} onClick={() => save.mutate(v)}>Save report settings</Button></div>
       </Card>
-      <Recipients />
+      <Card spotlight={false}>
+        <CardHeader title="Where reports appear" subtitle="Nothing is emailed — everyone reads them in the CRM" icon={<FileText className="size-4" />} />
+        <div className="space-y-2 px-5 pb-5">
+          {[
+            ["Founders", "Daily Reports in the Founders portal, with a notification as each one is ready."],
+            ["Sales heads", "Daily Reports in the sales portal, for their whole team."],
+            ["Legion", "Daily Reports in the Legion portal, to see how the pipeline is being worked."],
+            ["Each salesperson", "Their own report only, under AI Coaching."],
+          ].map(([who, where]) => (
+            <div key={who} className="flex items-start gap-3 rounded-xl border border-line px-3 py-2.5">
+              <span className="mt-1 size-2 shrink-0 rounded-full bg-success" />
+              <span><span className="block text-sm font-semibold text-fg">{who}</span><span className="block text-xs text-muted">{where}</span></span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
-  );
-}
-
-function Recipients() {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const q = useQuery({ queryKey: ["recipients"], queryFn: () => api.get<{ recipients: any[]; automatic: any[] }>("/settings/recipients") });
-  const [f, setF] = useState({ name: "", email: "", label: "Board" });
-  const add = useMutation({
-    mutationFn: () => api.post("/settings/recipients", f),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["recipients"] }); qc.invalidateQueries({ queryKey: ["recipients-preview"] }); setF({ name: "", email: "", label: "Board" }); toast({ kind: "success", title: "Recipient added" }); },
-    onError: (e) => toast({ kind: "error", title: "Couldn't add", body: (e as Error).message }),
-  });
-  const toggle = useMutation({ mutationFn: (r: any) => api.patch(`/settings/recipients/${r.id}`, { active: !r.active }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recipients"] }) });
-  const remove = useMutation({ mutationFn: (id: string) => api.del(`/settings/recipients/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["recipients"] }) });
-  return (
-    <Card spotlight={false}>
-      <CardHeader title="Report recipients" subtitle="Add anyone else who should get the daily reports" icon={<Mail className="size-4" />} />
-      <div className="space-y-4 px-5 pb-5">
-        <div>
-          <p className="mb-2 text-xs font-bold tracking-wide text-muted uppercase">Automatic (from roles)</p>
-          <div className="space-y-1.5">
-            {(q.data?.automatic ?? []).map((p) => (
-              <div key={p.email ?? p.full_name} className="flex items-center gap-3 rounded-xl bg-sunken/70 px-3 py-2">
-                <Avatar name={p.full_name} size={28} />
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-fg">{p.full_name}</span><span className="block truncate text-xs text-muted">{p.email ?? "no email — won't receive"}</span></span>
-                <Badge tone="brand">{p.title ?? ROLE_LABEL[p.role]}</Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-bold tracking-wide text-muted uppercase">Added by founders</p>
-          <AnimatePresence initial={false}>
-            {(q.data?.recipients ?? []).map((r) => (
-              <motion.div key={r.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-1.5 flex items-center gap-3 rounded-xl border border-line px-3 py-2">
-                <span className="grid size-8 place-items-center rounded-full bg-accent-soft text-accent-soft-fg"><Mail className="size-4" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-fg">{r.name} <Badge tone="neutral" className="ml-1">{r.label}</Badge></span><span className="block truncate text-xs text-muted">{r.email}</span></span>
-                <Switch checked={r.active} onChange={() => toggle.mutate(r)} label="Active" />
-                <button onClick={() => remove.mutate(r.id)} className="rounded-lg p-1.5 text-subtle hover:bg-danger-soft hover:text-danger" aria-label="Remove"><Trash2 className="size-4" /></button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {!q.data?.recipients.length && <p className="text-sm text-muted">Nobody added yet.</p>}
-        </div>
-        <div className="rounded-2xl border border-dashed border-line-strong p-3">
-          <div className="grid gap-2 sm:grid-cols-[1fr_1.3fr_0.8fr]">
-            <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Name" />
-            <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="email@company.com" type="email" />
-            <Input value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="Label" />
-          </div>
-          <Button className="mt-2 w-full" variant="soft" icon={<Plus className="size-4" />} disabled={!f.name || !f.email} loading={add.isPending} onClick={() => add.mutate()}>Add recipient</Button>
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -260,6 +221,12 @@ function AllocationSettings({ value }: { value: any }) {
       <Row title="Inactivity threshold (days)" body="No calls for this long flags someone's prospects for review."><Input type="number" min={1} value={v.inactivityDays} onChange={num("inactivityDays")} className="w-28" /></Row>
       <Row title="Stale lead (days)" body="A prospect with no next action for this long counts as stale."><Input type="number" min={1} value={v.staleDays} onChange={num("staleDays")} className="w-28" /></Row>
       <Row title="Sales heads can reassign" body="Founders always can. A reason is always required."><Switch checked={v.headsCanReassign} onChange={(x) => setV({ ...v, headsCanReassign: x })} /></Row>
+      <Row title="Morning top-up" body="Mon–Sat at this time, every active salesperson gets up to the batch size of new prospects from the unassigned pool — so a big import flows to the team automatically.">
+        <div className="flex items-center gap-3">
+          <Input type="time" value={v.autoTime} disabled={!v.autoEnabled} onChange={(e) => setV({ ...v, autoTime: e.target.value })} className="w-32" />
+          <Switch checked={v.autoEnabled} onChange={(x) => setV({ ...v, autoEnabled: x })} />
+        </div>
+      </Row>
       <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} onClick={() => save.mutate(v)}>Save allocation defaults</Button></div>
     </Card>
   );
@@ -294,9 +261,9 @@ function SystemSettings() {
   const jobs = useQuery({ queryKey: ["jobs"], queryFn: () => api.get<{ stats: any[]; failed: any[] }>("/jobs") });
   const retry = useMutation({ mutationFn: () => api.post<{ retried: number }>("/jobs/retry"), onSuccess: (r) => { toast({ kind: "success", title: `Retrying ${r.retried} jobs` }); qc.invalidateQueries({ queryKey: ["jobs"] }); } });
   const items = [
-    ["AI analysis", meta?.aiConfigured ? "Claude (Anthropic API)" : "Demo heuristics — set ANTHROPIC_API_KEY", meta?.aiConfigured],
-    ["Transcription", meta?.transcriptionConfigured ? "Deepgram (Hindi/English, diarised)" : "Set DEEPGRAM_API_KEY", meta?.transcriptionConfigured],
-    ["Email", meta?.emailConfigured ? "SMTP" : "Outbox only — set SMTP_HOST/USER/PASS", meta?.emailConfigured],
+    ["AI analysis", meta?.aiProvider === "gemini" ? `Google Gemini (${meta.aiModel})` : meta?.aiConfigured ? `Claude (${meta.aiModel})` : "Demo heuristics — set ANTHROPIC_API_KEY or GEMINI_API_KEY", meta?.aiConfigured],
+    ["Transcription", meta?.transcriptionConfigured ? (meta.aiProvider === "gemini" ? "Deepgram, or Gemini when there's no Deepgram key" : "Deepgram (Hindi/English, diarised)") : "Set DEEPGRAM_API_KEY (or use Gemini)", meta?.transcriptionConfigured],
+    ["Alert emails (optional)", meta?.emailConfigured ? "SMTP — urgent alerts also emailed" : "Off — alerts stay in the CRM", true],
     ["Recordings storage", meta?.storage === "r2" ? "Cloudflare R2 (private bucket)" : meta?.storage === "supabase" ? "Supabase Storage (private bucket)" : "Local disk", meta?.storage === "r2" || meta?.storage === "supabase"],
     ["Database", meta?.database === "postgres" ? "Postgres (Supabase)" : "Embedded (development only)", meta?.database === "postgres"],
   ] as const;
@@ -322,5 +289,37 @@ function SystemSettings() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function WhatsAppSettings({ value }: { value: { templates: { key: string; label: string; text: string }[] } }) {
+  const [list, setList] = useState(value.templates);
+  useEffect(() => setList(value.templates), [value]);
+  const save = useSave("whatsapp");
+  const set = (i: number, k: "label" | "text", v: string) => setList(list.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
+  return (
+    <Card spotlight={false} className="max-w-3xl">
+      <CardHeader title="WhatsApp quick messages" subtitle="One tap from a prospect's page or the Call Sprint opens WhatsApp with the message ready, and logs it on the timeline" icon={<MessageCircle className="size-4" />} />
+      <div className="space-y-3 px-5 pb-5">
+        <p className="rounded-xl bg-sunken px-3 py-2 text-xs text-muted">
+          Placeholders: <code>{"{first_name}"}</code> <code>{"{name}"}</code> <code>{"{company}"}</code> <code>{"{my_first_name}"}</code> <code>{"{my_name}"}</code>
+        </p>
+        <AnimatePresence initial={false}>
+          {list.map((t, i) => (
+            <motion.div key={t.key} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-2 rounded-2xl border border-line p-3">
+              <div className="flex items-center gap-2">
+                <Input value={t.label} onChange={(e) => set(i, "label", e.target.value)} placeholder="Name, e.g. After a good call" className="h-9" />
+                <button onClick={() => setList(list.filter((_, j) => j !== i))} className="rounded-lg p-1.5 text-subtle hover:bg-danger-soft hover:text-danger" aria-label="Remove template"><Trash2 className="size-4" /></button>
+              </div>
+              <Textarea value={t.text} onChange={(e) => set(i, "text", e.target.value)} rows={3} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {list.length < 12 && (
+          <Button variant="soft" icon={<Plus className="size-4" />} onClick={() => setList([...list, { key: `t${Date.now().toString(36)}`, label: "New message", text: "Hi {first_name}, " }])}>Add a message</Button>
+        )}
+      </div>
+      <div className="border-t border-line px-5 py-4"><Button variant="primary" loading={save.isPending} disabled={list.some((t) => !t.label.trim() || !t.text.trim())} onClick={() => save.mutate({ templates: list })}>Save messages</Button></div>
+    </Card>
   );
 }

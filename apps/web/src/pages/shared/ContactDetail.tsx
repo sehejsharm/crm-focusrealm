@@ -7,6 +7,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CallButton } from "../../components/call";
+import { WhatsAppButton } from "../../components/whatsapp";
 import { ScoreRing } from "../../components/charts";
 import { celebrate } from "../../components/motion";
 import { useToast } from "../../components/toast";
@@ -29,6 +30,7 @@ const FLOW = [
 const KIND_ICON: Record<string, typeof Phone> = {
   call: PhoneCall, note: MessageSquare, status: History, stage: Swords, assignment: Shuffle, task: CalendarClock,
   handoff: Handshake, meeting: CalendarPlus, ai: Sparkles, created: UserRound, qualification: CheckCircle2, closed: Trophy, dnc: Ban,
+  whatsapp: MessageSquare,
 };
 
 export default function ContactDetail() {
@@ -105,7 +107,10 @@ export default function ContactDetail() {
               </div>
             </div>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row lg:flex-col lg:items-end">
-              {canWork && !["legion"].includes(user?.role ?? "") && <CallButton size="lg" contact={c} label="Call now" className="min-w-44" />}
+              <div className="flex items-center gap-2 lg:justify-end">
+                {canWork && !["legion"].includes(user?.role ?? "") && <CallButton size="lg" contact={c} label="Call now" className="min-w-44" />}
+                {canWork && <WhatsAppButton contact={c} size={user?.role === "legion" ? "md" : "sm"} />}
+              </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
                 {canWork && <Button size="sm" icon={<CalendarClock className="size-4" />} onClick={() => setModal("followup")}>Follow-up</Button>}
                 {canWork && <Button size="sm" icon={<History className="size-4" />} onClick={() => setModal("status")}>Status</Button>}

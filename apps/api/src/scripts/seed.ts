@@ -289,9 +289,9 @@ export async function seedDemo(opts: { force?: boolean } = {}) {
       if (!calls.length) continue;
       const report = heuristicDailyReport({ repName: user.full_name, date, metrics, calls: calls.map((c) => ({ call_code: c.call_code, outcome: c.outcome, analysis: c.analysis })) });
       await db.query(
-        `insert into crm_daily_reports (user_id, report_date, status, metrics, report, model, emailed_to, emailed_at)
-         values ($1,$2,'emailed',$3::jsonb,$4::jsonb,'demo-heuristic',$5::text[], $6)`,
-        [rep.id, date, json(metrics), json(report), ["aarav@focusrealm.example", "kavya@focusrealm.example", "rohan@focusrealm.example"], new Date(dayBounds(date).from.getTime() + 20.5 * 3600_000)],
+        `insert into crm_daily_reports (user_id, report_date, status, metrics, report, model, updated_at)
+         values ($1,$2,'ready',$3::jsonb,$4::jsonb,'demo-heuristic',$5)`,
+        [rep.id, date, json(metrics), json(report), new Date(dayBounds(date).from.getTime() + 20.5 * 3600_000)],
       );
     }
   }

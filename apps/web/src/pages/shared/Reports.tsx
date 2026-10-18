@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { CalendarDays, Download, FileText, Mail, MailCheck, Play, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, Download, Eye, FileText, Play } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useToast } from "../../components/toast";
@@ -32,7 +32,7 @@ export function Grade({ grade, size = 48 }: { grade: string | null; size?: numbe
   );
 }
 
-/** Daily reports — one per salesperson per day, emailed to leadership. */
+/** Daily reports — one per salesperson per day, read here by the founders, sales heads and Legion. */
 export default function Reports() {
   const { user } = useAuth();
   const manager = useIsManager();
@@ -41,11 +41,10 @@ export default function Reports() {
   const [date, setDate] = useState(todayISO());
   const base = `/${user?.portal}`;
   const reports = useQuery({ queryKey: ["reports", date], queryFn: () => api.get<{ reports: any[] }>(`/reports${qs({ date })}`) });
-  const recipients = useQuery({ queryKey: ["recipients-preview"], queryFn: () => api.get<{ recipients: string[] }>("/reports/recipients/preview"), enabled: manager });
   const run = useMutation({
     mutationFn: () => api.post<{ queued: number; analyses: number }>("/reports/run", { date }),
     onSuccess: (r) => {
-      toast({ kind: "ai", title: `Building ${r.queued} reports`, body: `${r.analyses} recordings queued for AI analysis first. They'll appear here and be emailed automatically.` });
+      toast({ kind: "ai", title: `Building ${r.queued} reports`, body: `${r.analyses} recordings queued for AI analysis first. They'll appear here as they're ready.` });
       setTimeout(() => qc.invalidateQueries({ queryKey: ["reports"] }), 4000);
     },
     onError: (e) => toast({ kind: "error", title: "Couldn't start the run", body: (e as Error).message }),
@@ -57,7 +56,7 @@ export default function Reports() {
       <PageHeader
         eyebrow="AI daily reports"
         title="Daily sales reports"
-        subtitle="Every evening the AI analyses each salesperson's recordings and writes their report — emailed to the sales heads, CEO, COO and the founders' list."
+        subtitle="Every evening the AI analyses each salesperson's recordings and writes their report. It appears here for the founders, sales heads and Legion — with a notification when it's ready."
         actions={
           <>
             <div className="flex h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface px-3 shadow-xs">
@@ -69,12 +68,12 @@ export default function Reports() {
           </>
         }
       />
-      {manager && recipients.data && (
+      {user?.role !== "sales_rep" && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 text-sm shadow-xs">
-          <Mail className="size-4 text-accent" />
-          <span className="font-semibold text-fg">Emailed to:</span>
-          {recipients.data.recipients.map((r) => <Badge key={r} tone="brand">{r}</Badge>)}
-          {user?.role === "founder" && <Link to="/founder/settings" className="ml-auto text-xs font-semibold text-accent hover:underline">Manage recipients →</Link>}
+          <Eye className="size-4 text-accent" />
+          <span className="font-semibold text-fg">Visible to</span>
+          <Badge tone="brand">Founders</Badge><Badge tone="brand">Sales heads</Badge><Badge tone="brand">Legion</Badge>
+          <span className="text-muted">· each salesperson sees their own</span>
         </motion.div>
       )}
       {reports.isLoading ? (
@@ -112,7 +111,7 @@ export default function Reports() {
                   ))}
                 </div>
                 <div className="flex items-center gap-2 border-t border-line px-5 py-2.5 text-xs text-muted">
-                  {r.emailed_at ? <><MailCheck className="size-3.5 text-success" /> Emailed {fmtTime(r.emailed_at)} to {r.emailed_to.length}</> : <><Users className="size-3.5" /> {r.status}</>}
+                  {r.status === "ready" || r.status === "emailed" ? <><CheckCircle2 className="size-3.5 text-success" /> Ready {fmtTime(r.updated_at)}</> : <span className="capitalize">{r.status === "failed" ? "Couldn't be written" : "Writing…"}</span>}
                   {r.model === "demo-heuristic" && <Badge className="ml-auto" tone="neutral">demo AI</Badge>}
                 </div>
               </Link>

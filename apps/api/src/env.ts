@@ -35,6 +35,15 @@ function findRoot(): string {
   return process.cwd();
 }
 
+function aiProvider(): "anthropic" | "gemini" | "" {
+  const v = str("AI_PROVIDER").toLowerCase();
+  if (v === "anthropic" || v === "claude") return "anthropic";
+  if (v === "gemini" || v === "google") return "gemini";
+  if (str("ANTHROPIC_API_KEY") || str("ANTHROPIC_AUTH_TOKEN")) return "anthropic";
+  if (str("GEMINI_API_KEY") || str("GOOGLE_API_KEY")) return "gemini";
+  return "";
+}
+
 const root = findRoot();
 const isProd = str("NODE_ENV") === "production";
 /** Running as a Vercel serverless function (no long-lived process). */
@@ -86,9 +95,14 @@ export const env = {
   recordingsBucket: str("SUPABASE_RECORDINGS_BUCKET", "crm-call-recordings"),
   r2,
 
-  // Call intelligence.
+  // Call intelligence. AI_PROVIDER picks who analyses calls and writes the
+  // daily reports: "anthropic" (Claude) or "gemini" (Google; has a free
+  // tier). Left empty, whichever key is set is used, Claude first.
+  aiProvider: aiProvider(),
   anthropicConfigured: Boolean(str("ANTHROPIC_API_KEY") || str("ANTHROPIC_AUTH_TOKEN")),
   aiModel: str("AI_MODEL", "claude-opus-5-5"),
+  geminiApiKey: str("GEMINI_API_KEY", str("GOOGLE_API_KEY")),
+  geminiModel: str("GEMINI_MODEL", "gemini-flash-latest"),
   aiEffort: str("AI_EFFORT", "high") as "low" | "medium" | "high" | "xhigh" | "max",
   deepgramApiKey: str("DEEPGRAM_API_KEY"),
   deepgramModel: str("DEEPGRAM_MODEL", "nova-3"),

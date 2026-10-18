@@ -8,7 +8,7 @@ import {
 } from "../lib/auth.js";
 import { badRequest, HttpError, parse } from "../lib/http.js";
 import { audit } from "../lib/record.js";
-import { aiConfigured } from "../services/analysis.js";
+import { activeModel, aiConfigured } from "../services/analysis.js";
 import { emailConfigured } from "../services/email.js";
 import { getSetting } from "../services/settings.js";
 import { activeProvider } from "../services/telephony/index.js";
@@ -156,6 +156,8 @@ authRouter.get("/meta", async (_req, res) => {
     telephonyMode: t.mode,
     bridgeReady: Boolean(activeProvider()),
     aiConfigured: aiConfigured(),
+    aiProvider: aiConfigured() ? env.aiProvider : null,
+    aiModel: activeModel() || null,
     transcriptionConfigured: transcriptionConfigured(),
     emailConfigured: emailConfigured(),
     storage: env.storageDriver,

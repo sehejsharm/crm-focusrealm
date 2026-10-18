@@ -4,9 +4,9 @@ One platform for the Focus Realm sales floor: import the contact database,
 allocate prospects fairly, call with one tap, record every call, and have AI
 analyse **every recording at the end of the day** — how each salesperson
 spoke, how they handled the conversation, how the prospect responded, scored
-against the major sales frameworks — then **email one report per salesperson
-every evening** to the sales heads, the CEO, the COO and anyone else the
-founders choose.
+against the major sales frameworks — then write **one report per salesperson
+every evening**, ready in Daily Reports for the founders, sales heads and
+Legion.
 
 Connected to the Focus Realm **HR console**: when someone joins the sales
 department there, they get a CRM login automatically.
@@ -20,9 +20,9 @@ motion everywhere.
 
 | Portal | Who | What they do |
 |---|---|---|
-| **Sales Team** (`/sales`) | Sales team members (and sales heads) | *My Day* (target ring, follow-ups due, fresh prospects, latest coaching, leaderboard) · prospects · the board · one-tap **Call** · follow-ups & reminders · call history with transcripts and AI coaching · their daily reports. Sales heads also get Team Pulse, Allocation, Database & Import, Call Intelligence, Daily Reports and Team Tasks. |
+| **Sales Team** (`/sales`) | Sales team members (and sales heads) | *My Day* (target ring, follow-ups due, fresh prospects, latest coaching, leaderboard) · **Call Sprint** (power dialler) · prospects · the board · one-tap **Call** and **WhatsApp** · follow-ups & reminders · **Upload Recordings** · call history with transcripts and AI coaching · their daily reports. Sales heads also get Team Pulse, Allocation, Database & Import, Call Intelligence, Daily Reports and Team Tasks. |
 | **Legion** (`/legion`) | The Legion team | Legion HQ · **handoff inbox** (accept, or return with a reason) · Legion Meet 1 & 2 scheduling and outcomes · the pipeline · a live view of the **sales team's work** (leaderboard, activity feed, calls, daily reports). |
-| **Founders** (`/founder`) | CEO, COO, founders | **Command Center** (funnel, conversion, decision-maker reach, follow-up compliance, overdue work, objections, product feedback, system health) · everything the other portals have · **assign tasks** to anyone · people & access · settings (report recipients, calling mode, HR connection, allocation rules, qualification checklist) · audit log. |
+| **Founders** (`/founder`) | CEO, COO, founders | **Command Center** (funnel, conversion, decision-maker reach, follow-up compliance, overdue work, objections, product feedback, system health) · everything the other portals have · **assign tasks** to anyone · people & access · settings (daily reports, calling mode, HR connection, allocation & morning top-up, qualification checklist, WhatsApp messages) · audit log. |
 
 Plus **Phone Link** (`/phone`) — a mobile screen for each salesperson's phone
 (add it to the home screen). Pressing **Call** in the CRM sends the number to
@@ -40,23 +40,29 @@ Email works as a login too. Details: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.
 
 ## The sales journey (as specified by the founders)
 
-1. **Import the contact database** — CSV from Excel/Google Sheets, columns
-   matched automatically, duplicates (by phone, then email) and invalid numbers
-   reported row by row. Large files upload in chunks.
+1. **Import the contact database** — Excel (.xlsx) or CSV, with a downloadable
+   template; columns matched automatically whatever they're called,
+   duplicates (by phone, then email) and invalid numbers reported row by row.
+   Thousands of rows at a time (tested with 6,000).
 2. **Allocate** prospects to the salespeople — balanced, randomised within each
    segment, capped by everyone's active-prospect limit, previewed before it's
-   committed, fully audited (proposal §4). Inactive or offboarded people's
-   prospects are flagged for review, never silently reassigned.
+   committed, fully audited (proposal §4). Right after an import, **Allocate
+   now** fills everyone's book; the **morning top-up** (Settings → Allocation)
+   then hands each salesperson their next batch every morning, Mon–Sat, from
+   what's left. Inactive or offboarded people's prospects are flagged for
+   review, never silently reassigned.
 3. **Call** — the **Call** button creates a unique call ID and puts the number
    on the salesperson's phone, either:
    - **Bridge** (Exotel/Twilio): the provider rings the salesperson's own phone,
      connects the prospect and **records both sides automatically**; or
    - **Phone Link**: the number appears on their phone to dial on their SIM;
-     the recording from the phone's call recorder is attached after; or
+     the recording from the phone's call recorder is attached after — on the
+     phone, in the wrap-up, or on **Upload Recordings** (MP3, M4A, WAV, AAC,
+     OGG/Opus, AMR, 3GP, WebM, FLAC); or
    - **Demo**: simulated calls with sample conversations.
 4. **Record** — recordings go to a private Cloudflare R2 bucket, never public.
-5. **End of day, AI analyses every recording** (Deepgram transcription with
-   speaker labels — Hindi/English mix supported — then Claude): call score,
+5. **End of day, AI analyses every recording** (transcription with speaker
+   labels — Hindi/English mix supported — then Claude or Gemini): call score,
    ten skills, **SPIN, BANT, MEDDIC, Challenger, Sandler, GAP Selling, NEAT,
    SNAP, Straight Line and AIDA**, talk ratio, questions, filler words,
    objections and how they were handled (with a better line to use), the
@@ -65,8 +71,21 @@ Email works as a login too. Details: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.
    example lines, next action, and a confidence score with human review for
    uncertain results. Founders can switch on *immediate* analysis too.
 6. **One report per salesperson per day**, written by AI from those analyses
-   plus the day's metrics, **emailed automatically** to every sales head, every
-   founder (CEO, COO…) and the recipients the founders add in Settings.
+   plus the day's metrics, shown in **Daily Reports** to the founders, sales
+   heads and Legion (with a notification when each is ready). Nothing is
+   emailed; any report can be printed or saved as PDF.
+
+Built in to make the floor faster:
+
+- **Call Sprint** — a power dialler: follow-ups due, fresh prospects and
+  leads gone quiet, one at a time with the context and the AI's suggested
+  line; Space to call, S to skip, the next one appears after the wrap-up.
+- **WhatsApp quick messages** — templates the founders write, filled with
+  the prospect's name and company, opened in WhatsApp in one tap and logged
+  on the timeline.
+- **Live floor** on the founder and Legion dashboards — who's on a call
+  right now and how everyone's day is going — plus a *Needs your attention*
+  list.
 
 Everything else follows the proposal: the four-milestone Kanban (Prospect →
 Qualified → Legion Meet 1 → Legion Meet 2) with individual statuses
@@ -94,7 +113,7 @@ reports). Sign in with one tap, or:
 | Sales team | `FR-0021` … `FR-0025` | `focus-realm-demo` |
 | Legion | `FR-0031`, `FR-0032` | `focus-realm-demo` |
 
-Demo mode never dials real numbers. Without SMTP, report emails are written
+Demo mode never dials real numbers. Without SMTP, alert emails are written
 to `./.data/outbox/` so you can open them. Reset the demo with
 `rm -rf .data` (or `npm run seed -- --force`).
 
@@ -140,8 +159,32 @@ docs/        Deploy guide, HR console contract, prompt and client
 - **Live updates** by short-polling an events table (works on serverless).
 - **AI**: Claude via the official SDK with structured outputs (typed JSON
   validated against a schema) and refusal fallbacks; model and effort set by
-  `AI_MODEL` / `AI_EFFORT`. Without a key, a clearly-labelled rule-based demo
-  analyser keeps everything explorable.
+  `AI_MODEL` / `AI_EFFORT`. Or Google Gemini (`AI_PROVIDER=gemini`), which has
+  a free tier and can also transcribe — see [AI costs](#ai-costs). Without a
+  key, a clearly-labelled rule-based demo analyser keeps everything explorable.
+
+## AI costs
+
+The Anthropic (Claude) API is **paid per use** — there's no free tier. Rough
+cost per analysed call (a ~10-minute call ≈ 6K tokens in, ~4K out):
+
+| `AI_MODEL` | Price per 1M tokens (in / out) | ≈ per call | ≈ 200 calls/day, 26 days |
+|---|---|---|---|
+| `claude-opus-5-5` (default, best) | $4 / $20 | $0.10 | ~$540 / month |
+| `claude-sonnet-5-5` | $2 / $10 | $0.05 | ~$270 / month |
+| `claude-haiku-5-5` (cheapest) | $0.10 / $0.50 | $0.003 | ~$14 / month |
+
+Only connected calls with a recording are analysed, so real numbers are
+usually lower; daily reports add a little on top. Transcription (Deepgram) is
+billed separately.
+
+**Free option:** `AI_PROVIDER=gemini` with a `GEMINI_API_KEY` from Google AI
+Studio runs analysis, reports *and* transcription on Gemini's free tier.
+Two catches: the free tier has daily request limits (the job queue retries
+the next day), and Google's terms let it use — and people review — what you
+send on the free tier, which here means recordings of customer calls.
+Turning on billing for the Google project makes it a paid service that isn't
+used for training.
 
 ## Security & privacy
 
@@ -154,8 +197,8 @@ docs/        Deploy guide, HR console contract, prompt and client
   played through 10-minute signed URLs after a permission check; every playback is audited. Retention is configurable
   (default 180 days).
 - Recording notice text configurable: Twilio bridge calls play it; Phone Link shows it to the salesperson to read out.
-- Audit log of logins, allocations, reassignments, settings, HR events, report
-  emails and recording playback.
+- Audit log of logins, allocations, reassignments, settings, HR events and
+  recording playback.
 
 ## Scripts
 

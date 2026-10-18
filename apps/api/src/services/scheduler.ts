@@ -10,6 +10,7 @@ import { storage } from "./storage.js";
 import { escalateOverdue, sendDueReminders } from "./tasks.js";
 import { STALE_SQL } from "./contacts.js";
 import { notify } from "../lib/record.js";
+import { autoTopUp } from "./allocation.js";
 
 /**
  * Time-based work: task reminders every minute, overdue escalation, the
@@ -47,6 +48,30 @@ export async function maybeRunDailyReports(opts: { ignoreTime?: boolean } = {}) 
   return runDailyReports(today);
 }
 
+/**
+ * The morning top-up (Settings → Allocation): once a day, Monday–Saturday,
+ * after the chosen time. The day is claimed atomically so two server
+ * instances can never both run it.
+ */
+export async function maybeAutoTopUp(opts: { ignoreTime?: boolean } = {}) {
+  const s = await getSetting("allocation");
+  if (!s.autoEnabled) return null;
+  const { timezone } = await getSetting("reports");
+  if (new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short" }).format(new Date()) === "Sun") return null;
+  if (!opts.ignoreTime && localHHMM(timezone) < s.autoTime) return null;
+  const today = todayLocal(new Date(), timezone);
+  const claimed = await db.maybe(
+    `insert into crm_settings (key, value) values ('_scheduler', jsonb_build_object('lastAutoTopUp', $1::text))
+     on conflict (key) do update set value = crm_settings.value || excluded.value, updated_at = now()
+       where crm_settings.value->>'lastAutoTopUp' is distinct from $1::text
+     returning key`,
+    [today],
+  );
+  if (!claimed) return null;
+  console.log(`[scheduler] morning top-up for ${today}`);
+  return autoTopUp();
+}
+
 /** Once a day: tell each salesperson how many of their prospects have gone stale. */
 async function staleNudges() {
   const { staleDays } = await getSetting("allocation");
@@ -78,6 +103,7 @@ export async function runMaintenance() {
   const reminders = await sendDueReminders();
   const escalated = await escalateOverdue();
   const report = await maybeRunDailyReports();
+  const topUp = await maybeAutoTopUp();
   const st = await state();
   let removed = 0;
   const today = todayLocal();
@@ -87,7 +113,7 @@ export async function runMaintenance() {
     await staleNudges();
     await saveState({ lastRetention: today });
   }
-  return { reminders, escalated, report, recordingsRemoved: removed };
+  return { reminders, escalated, report, topUp, recordingsRemoved: removed };
 }
 
 let lastNudge = 0;
@@ -109,6 +135,7 @@ export async function opportunisticMaintenance() {
   if (!claimed) return;
   await sendDueReminders();
   await maybeRunDailyReports();
+  await maybeAutoTopUp();
   await drain({ budgetMs: 120_000, concurrency: 3 });
 }
 
@@ -117,6 +144,7 @@ export function startScheduler() {
   cron.schedule("* * * * *", () => {
     sendDueReminders().catch((e) => console.error("[scheduler] reminders", e));
     maybeRunDailyReports().catch((e) => console.error("[scheduler] daily reports", e));
+    maybeAutoTopUp().catch((e) => console.error("[scheduler] auto top-up", e));
   });
   cron.schedule("*/15 * * * *", () => {
     escalateOverdue().catch((e) => console.error("[scheduler] escalation", e));

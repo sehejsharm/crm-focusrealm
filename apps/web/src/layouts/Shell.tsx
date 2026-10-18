@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell, BrainCircuit, CalendarCheck, ChartNoAxesCombined, ClipboardList, Contact, Crown, Database, FileText, Gauge, Handshake,
-  KanbanSquare, LayoutDashboard, ListTodo, LogOut, Menu, Moon, PhoneCall, ScrollText, Search, Settings, Shield, Shuffle,
-  Smartphone, Sparkles, Sun, Swords, Target, Users, X,
+  KanbanSquare, LayoutDashboard, ListTodo, LogOut, Menu, Mic, Moon, PhoneCall, ScrollText, Search, Settings, Shield, Shuffle,
+  Smartphone, Sparkles, Sun, Swords, Target, Users, X, Zap,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useOutlet } from "react-router-dom";
@@ -66,10 +66,12 @@ export function navFor(role: Role): { portal: string; title: string; items: NavI
   }
   const items: NavItem[] = [
     { to: "/sales", label: "My Day", icon: Target, end: true, section: "Sales" },
+    { to: "/sales/sprint", label: "Call Sprint", icon: Zap },
     { to: "/sales/prospects", label: "My Prospects", icon: Contact },
     { to: "/sales/pipeline", label: "Pipeline", icon: KanbanSquare },
     { to: "/sales/follow-ups", label: "Follow-ups", icon: ClipboardList },
     { to: "/sales/calls", label: "My Calls", icon: PhoneCall },
+    { to: "/sales/recordings", label: "Upload Recordings", icon: Mic },
     { to: "/sales/coaching", label: "AI Coaching", icon: Sparkles },
   ];
   if (role === "sales_head") {
@@ -256,12 +258,14 @@ export function Shell() {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         <SideNav items={nav.items} onNavigate={() => setMobile(false)} />
       </div>
-      <div className="m-3 overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-brand-50 to-surface p-3.5 dark:from-brand-950/60 dark:to-surface">
-        <div className="flex items-center gap-2 text-xs font-semibold text-fg">
-          <Smartphone className="size-4 text-accent" /> Phone Link
+      {nav.portal === "sales" && (
+        <div className="m-3 overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-brand-50 to-surface p-3.5 dark:from-brand-950/60 dark:to-surface">
+          <div className="flex items-center gap-2 text-xs font-semibold text-fg">
+            <Smartphone className="size-4 text-accent" /> Phone Link
+          </div>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-muted">Open <b>/phone</b> on your mobile — numbers you call appear there to dial and record.</p>
         </div>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-muted">Open <b>/phone</b> on your mobile — numbers you call appear there to dial and record.</p>
-      </div>
+      )}
     </div>
   );
 

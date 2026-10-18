@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Bot, Download, PhoneCall } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Avatar, Badge, Button, Card, Empty, PageHeader, Select, Skeleton } from "../../components/ui";
 import { api, qs } from "../../lib/api";
 import { useAuth, useIsManager } from "../../lib/auth";
@@ -17,8 +17,10 @@ export default function Calls() {
   const { user } = useAuth();
   const manager = useIsManager();
   const base = `/${user?.portal}`;
+  const [params] = useSearchParams();
   const [outcome, setOutcome] = useState("");
-  const [analysis, setAnalysis] = useState("");
+  const [analysis, setAnalysis] = useState(params.get("analysis") ?? "");
+  const [recording, setRecording] = useState(params.get("recording") ?? "");
   const [userId, setUserId] = useState("");
   const [day, setDay] = useState("");
   const [page, setPage] = useState(1);
@@ -26,8 +28,8 @@ export default function Calls() {
   const from = day ? new Date(`${day}T00:00:00+05:30`).toISOString() : undefined;
   const to = day ? new Date(new Date(`${day}T00:00:00+05:30`).getTime() + 86400_000).toISOString() : undefined;
   const q = useQuery({
-    queryKey: ["calls", outcome, analysis, userId, day, page],
-    queryFn: () => api.get<{ total: number; rows: Call[] }>(`/calls${qs({ outcome, analysis, userId, from, to, page, pageSize: 40 })}`),
+    queryKey: ["calls", outcome, analysis, recording, userId, day, page],
+    queryFn: () => api.get<{ total: number; rows: Call[] }>(`/calls${qs({ outcome, analysis, recording, userId, from, to, page, pageSize: 40 })}`),
     placeholderData: keepPreviousData,
   });
   const pages = Math.ceil((q.data?.total ?? 0) / 40);
@@ -51,6 +53,11 @@ export default function Calls() {
           <option value="needs_review">Needs human review</option>
           <option value="queued">Queued for end of day</option>
           <option value="none">Not analysed</option>
+        </Select>
+        <Select value={recording} onChange={(e) => { setRecording(e.target.value); setPage(1); }} className="w-auto min-w-40">
+          <option value="">Any recording</option>
+          <option value="uploaded">Has a recording</option>
+          <option value="missing">Connected, no recording</option>
         </Select>
         {user?.role !== "sales_rep" && (
           <Select value={userId} onChange={(e) => { setUserId(e.target.value); setPage(1); }} className="w-auto min-w-40">

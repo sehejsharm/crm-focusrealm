@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Check, History, Shuffle, Sparkles, UserCheck, Users, Zap } from "lucide-react";
+import { AlertTriangle, Check, Database, History, Repeat, Shuffle, Sparkles, UserCheck, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { celebrate, Counter } from "../../components/motion";
@@ -32,6 +32,7 @@ export default function Allocation() {
   return (
     <div>
       <PageHeader eyebrow="Allocation" title="Allocate prospects" subtitle="Balanced, randomised distribution within each segment — capped by everyone's active-prospect limit." actions={<Tabs value={tab} onChange={setTab} items={[{ value: "allocate", label: "Allocate" }, { value: "history", label: "History" }, { value: "flags", label: "Needs review" }]} />} />
+      <PoolBanner />
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
           {tab === "allocate" && <Allocate />}
@@ -216,7 +217,7 @@ function BatchHistory() {
         <motion.div key={b.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="flex flex-wrap items-center gap-3 px-5 py-3.5 text-sm">
           <span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-accent-soft-fg"><Shuffle className="size-4" /></span>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-fg">{b.assigned_count} prospects · by {b.initiated_by_name ?? "—"}</p>
+            <p className="font-semibold text-fg">{b.assigned_count} prospects · {b.initiated_by ? `by ${b.initiated_by_name ?? "—"}` : "morning top-up"}</p>
             <p className="text-xs text-muted">{fmtDateTime(b.created_at)} · batch {b.settings?.batchSize} · max {b.settings?.maxActive}{b.settings?.campaign ? ` · ${b.settings.campaign}` : ""}{b.settings?.segment ? ` · ${b.settings.segment}` : ""}</p>
           </div>
           <Badge tone="neutral">{Object.keys(b.summary?.perUser ?? {}).length} people</Badge>
@@ -245,5 +246,24 @@ function Flags({ base }: { base: string }) {
         </motion.div>
       ))}
     </div>
+  );
+}
+
+/** How much is waiting to be allocated, and whether the morning top-up is on. */
+function PoolBanner() {
+  const { user } = useAuth();
+  const o = useQuery({ queryKey: ["allocation-overview"], queryFn: () => api.get<{ pool: number; room: number; settings: { autoEnabled: boolean; autoTime: string; batchSize: number } }>("/allocation/overview") });
+  if (!o.data) return null;
+  const d = o.data;
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-3 text-sm shadow-xs">
+      <span className="flex items-center gap-2"><Database className="size-4 text-accent" /><b className="text-fg">{d.pool.toLocaleString("en-IN")}</b><span className="text-muted">unassigned prospects</span></span>
+      <span className="flex items-center gap-2"><Users className="size-4 text-accent" /><span className="text-muted">room for</span><b className="text-fg">{d.room.toLocaleString("en-IN")}</b><span className="text-muted">right now</span></span>
+      <span className={cn("flex items-center gap-2", d.settings.autoEnabled ? "text-success" : "text-muted")}>
+        <Repeat className="size-4" />
+        {d.settings.autoEnabled ? `Morning top-up on · ${d.settings.batchSize} each at ${d.settings.autoTime}` : "Morning top-up off"}
+      </span>
+      {user?.role === "founder" && <Link to="/founder/settings?tab=allocation" className="ml-auto text-xs font-semibold text-accent hover:underline">Change →</Link>}
+    </motion.div>
   );
 }

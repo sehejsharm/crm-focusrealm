@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { audioProblem, audioTypeOf } from "./audio";
 import type { Call } from "./types";
 
 /**
@@ -8,7 +9,9 @@ import type { Call } from "./types";
  * otherwise it's posted to the API.
  */
 export async function uploadRecording(callId: string, file: File, onProgress?: (pct: number) => void): Promise<Call> {
-  const mime = file.type || "audio/mpeg";
+  const problem = audioProblem(file);
+  if (problem) throw new Error(problem);
+  const mime = audioTypeOf(file) ?? "audio/mpeg";
   const target = await api.post<{ mode: "direct" | "api"; url: string; headers?: Record<string, string>; key?: string; mime?: string }>(`/calls/${callId}/recording/upload-url`, { mime });
   if (target.mode === "api") {
     const form = new FormData();

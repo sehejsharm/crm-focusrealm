@@ -19,18 +19,17 @@ export const settingSchemas = {
     staleDays: z.number().int().min(1).max(60),
     /** Who may reassign: founders always; sales heads when true. */
     headsCanReassign: z.boolean(),
+    /** Auto top-up: every morning (Mon–Sat) each active salesperson gets up to
+     *  batchSize new prospects from the unassigned pool, never above maxActive. */
+    autoEnabled: z.boolean(),
+    /** Local time the morning top-up runs, HH:MM. */
+    autoTime: z.string().regex(/^\d{2}:\d{2}$/),
   }),
   reports: z.object({
     enabled: z.boolean(),
     /** Local time the end-of-day run starts, HH:MM. */
     time: z.string().regex(/^\d{2}:\d{2}$/),
     timezone: z.string(),
-    /** Every active founder (CEO, COO…) receives every report. */
-    includeFounders: z.boolean(),
-    /** Every active sales head receives every report. */
-    includeSalesHeads: z.boolean(),
-    /** Each salesperson also receives their own report. */
-    sendRepCopy: z.boolean(),
     /** "end_of_day": analyse all of the day's recordings in the evening run.
      *  "immediate": analyse each recording as soon as it arrives, too. */
     analysisMode: z.enum(["end_of_day", "immediate"]),
@@ -58,6 +57,10 @@ export const settingSchemas = {
     /** Title keywords that make someone a sales head instead of a salesperson. */
     headKeywords: z.array(z.string()).max(20),
   }),
+  whatsapp: z.object({
+    /** One-tap WhatsApp messages. Placeholders: {first_name} {name} {company} {my_name} {my_first_name}. */
+    templates: z.array(z.object({ key: z.string().max(40), label: z.string().min(1).max(60), text: z.string().min(1).max(1000) })).max(12),
+  }),
   qualification: z.object({
     /** The checklist a prospect must satisfy before it can be handed to Legion. */
     fields: z
@@ -70,14 +73,11 @@ export type SettingKey = keyof typeof settingSchemas;
 export type Settings = { [K in SettingKey]: z.infer<(typeof settingSchemas)[K]> };
 
 export const defaults: Settings = {
-  allocation: { batchSize: 10, maxActive: 60, inactivityDays: 3, staleDays: 7, headsCanReassign: true },
+  allocation: { batchSize: 10, maxActive: 60, inactivityDays: 3, staleDays: 7, headsCanReassign: true, autoEnabled: false, autoTime: "09:30" },
   reports: {
     enabled: true,
     time: "20:00",
     timezone: "Asia/Kolkata",
-    includeFounders: true,
-    includeSalesHeads: true,
-    sendRepCopy: false,
     analysisMode: "end_of_day",
     skipEmptyDays: true,
   },
@@ -90,6 +90,13 @@ export const defaults: Settings = {
   hr: {
     crmDepartments: ["sales", "business development", "business-development", "bd", "inside sales"],
     headKeywords: ["head", "lead", "manager", "vp", "director"],
+  },
+  whatsapp: {
+    templates: [
+      { key: "intro", label: "After a good call", text: "Hi {first_name}, this is {my_first_name} from Focus Realm. Thanks for your time just now! As discussed, here's a quick overview of how we help businesses like {company}. When suits you for a short meeting with our team?" },
+      { key: "missed", label: "Couldn't reach them", text: "Hi {first_name}, this is {my_first_name} from Focus Realm. I tried calling you just now — when would be a good time for a quick 5-minute chat?" },
+      { key: "meeting", label: "Meeting reminder", text: "Hi {first_name}, a quick reminder about your meeting with the Focus Realm team. Looking forward to it! — {my_first_name}" },
+    ],
   },
   qualification: {
     fields: [
