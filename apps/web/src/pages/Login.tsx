@@ -116,7 +116,7 @@ export default function Login() {
                   <span className="grid size-10 place-items-center rounded-xl bg-emerald-400/20 text-emerald-300"><TrendingUp className="size-5" /></span>
                   <div>
                     <p className="text-sm font-semibold">Legion Meet booked 🚀</p>
-                    <p className="text-xs text-white/65">Report emailed to CEO & COO</p>
+                    <p className="text-xs text-white/65">Report ready for founders & Legion</p>
                   </div>
                 </div>
               </Tilt>
@@ -292,7 +292,7 @@ function FirstFounderSetup({ enabled }: { enabled: boolean }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {field("FR number", "employee_code", { placeholder: "FR-0001", autoComplete: "username" })}
             {field("Full name", "full_name", { autoComplete: "name" })}
-            {field("Email", "email", { type: "email", autoComplete: "email", placeholder: "Daily reports go here" })}
+            {field("Email", "email", { type: "email", autoComplete: "email", placeholder: "you@focusrealm.org" })}
             {field("Title", "title", { placeholder: "Co-founder & CEO" })}
             {field("Password", "password", { type: "password", autoComplete: "new-password", placeholder: "10+ characters" })}
             {field("Repeat password", "confirm", { type: "password", autoComplete: "new-password" })}
