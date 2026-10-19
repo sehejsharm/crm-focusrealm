@@ -159,6 +159,7 @@ authRouter.get("/meta", async (_req, res) => {
     aiProvider: aiConfigured() ? env.aiProvider : null,
     aiModel: activeModel() || null,
     transcriptionConfigured: transcriptionConfigured(),
+    deepgramConfigured: Boolean(env.deepgramApiKey),
     emailConfigured: emailConfigured(),
     storage: env.storageDriver,
     // No founder yet: the sign-in page offers first-run setup instead.

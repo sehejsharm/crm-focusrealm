@@ -27,6 +27,7 @@ export interface Meta {
   aiProvider: "anthropic" | "gemini" | null;
   aiModel: string | null;
   transcriptionConfigured: boolean;
+  deepgramConfigured?: boolean;
   emailConfigured: boolean;
   storage: string;
   database: string;

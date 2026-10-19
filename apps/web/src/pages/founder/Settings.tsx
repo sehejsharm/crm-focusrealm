@@ -262,7 +262,7 @@ function SystemSettings() {
   const retry = useMutation({ mutationFn: () => api.post<{ retried: number }>("/jobs/retry"), onSuccess: (r) => { toast({ kind: "success", title: `Retrying ${r.retried} jobs` }); qc.invalidateQueries({ queryKey: ["jobs"] }); } });
   const items = [
     ["AI analysis", meta?.aiProvider === "gemini" ? `Google Gemini (${meta.aiModel})` : meta?.aiConfigured ? `Claude (${meta.aiModel})` : "Demo heuristics — set ANTHROPIC_API_KEY or GEMINI_API_KEY", meta?.aiConfigured],
-    ["Transcription", meta?.transcriptionConfigured ? (meta.aiProvider === "gemini" ? "Deepgram, or Gemini when there's no Deepgram key" : "Deepgram (Hindi/English, diarised)") : "Set DEEPGRAM_API_KEY (or use Gemini)", meta?.transcriptionConfigured],
+    ["Transcription", meta?.transcriptionConfigured ? (meta.deepgramConfigured ? "Deepgram (Hindi/English, speaker labels)" : "Gemini — add DEEPGRAM_API_KEY for AMR/3GP/WebM and better Hindi–English") : "Set DEEPGRAM_API_KEY (or use Gemini)", meta?.transcriptionConfigured],
     ["Alert emails (optional)", meta?.emailConfigured ? "SMTP — urgent alerts also emailed" : "Off — alerts stay in the CRM", true],
     ["Recordings storage", meta?.storage === "r2" ? "Cloudflare R2 (private bucket)" : meta?.storage === "supabase" ? "Supabase Storage (private bucket)" : "Local disk", meta?.storage === "r2" || meta?.storage === "supabase"],
     ["Database", meta?.database === "postgres" ? "Postgres (Supabase)" : "Embedded (development only)", meta?.database === "postgres"],
