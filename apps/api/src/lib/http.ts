@@ -49,7 +49,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
  * A deployment that isn't configured right fails on every request. Say what
  * is wrong (names only, never values) so it can be fixed without reading logs.
  */
-function setupProblem(err: unknown): string | null {
+export function setupProblem(err: unknown): string | null {
   const e = err as { message?: string; code?: string };
   const msg = e?.message ?? "";
   if (msg.startsWith("Refusing to start in production")) return `Server setup incomplete. ${msg.replace("Refusing to start in production without:", "Missing:")}`;

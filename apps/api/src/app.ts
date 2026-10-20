@@ -7,7 +7,7 @@ import { connect, db, migrate } from "./db/index.js";
 import { assertProductionConfig, env } from "./env.js";
 import { loadUser, requireAuth } from "./lib/auth.js";
 import { background } from "./lib/bus.js";
-import { errorHandler } from "./lib/http.js";
+import { errorHandler, setupProblem } from "./lib/http.js";
 import { api } from "./routes/api.js";
 import { authRouter } from "./routes/auth.js";
 import { events } from "./routes/events.js";
@@ -78,7 +78,8 @@ export function createApp() {
   );
 
   // Nothing runs before the database is ready.
-  app.use(async (_req, _res, next) => {
+  app.use(async (req, _res, next) => {
+    if (req.path === "/api/health") return next();
     try {
       await ensureReady();
       next();
@@ -93,9 +94,23 @@ export function createApp() {
   app.use(express.json({ limit: "4mb" }));
   app.use(cookieParser());
   app.use(loadUser);
+  // Public self-check: which settings are present (names only) and whether
+  // the database answers. Open /api/health to see why a deployment fails.
   app.get("/api/health", async (_req, res) => {
-    await db.query("select 1");
-    res.json({ ok: true, database: db.kind, serverless: env.serverless });
+    const settings = {
+      JWT_SECRET: env.jwtSecret.length >= 32,
+      DATABASE_URL: Boolean(env.databaseUrl),
+      R2: Boolean(env.r2.endpoint && env.r2.accessKeyId && env.r2.secretAccessKey),
+      GEMINI_API_KEY: Boolean(process.env.GEMINI_API_KEY),
+      DEEPGRAM_API_KEY: Boolean(env.deepgramApiKey),
+    };
+    try {
+      await ensureReady();
+      await db.query("select 1");
+      res.json({ ok: true, database: db.kind, settings });
+    } catch (e) {
+      res.status(500).json({ ok: false, problem: setupProblem(e) ?? "Unexpected startup error; see Vercel → Logs", settings });
+    }
   });
   app.use("/api/auth", authRouter);
   // On serverless there's no clock process: signed-in traffic nudges the
