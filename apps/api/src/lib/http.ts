@@ -42,7 +42,24 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
   console.error("[api] unhandled error", err);
-  res.status(500).json({ error: "Something went wrong on our side" });
+  res.status(500).json({ error: setupProblem(err) ?? "Something went wrong on our side" });
+}
+
+/**
+ * A deployment that isn't configured right fails on every request. Say what
+ * is wrong (names only, never values) so it can be fixed without reading logs.
+ */
+function setupProblem(err: unknown): string | null {
+  const e = err as { message?: string; code?: string };
+  const msg = e?.message ?? "";
+  if (msg.startsWith("Refusing to start in production")) return `Server setup incomplete. ${msg.replace("Refusing to start in production without:", "Missing:")}`;
+  const db = "Can't reach the database (DATABASE_URL): ";
+  if (e?.code === "28P01" || /password authentication failed/i.test(msg)) return db + "wrong password. Replace [YOUR-PASSWORD] with the real database password.";
+  if (/tenant or user not found/i.test(msg)) return db + "wrong user or project in the connection string. Copy it again from Supabase → Connect → Transaction pooler.";
+  if (e?.code === "ENOTFOUND" || e?.code === "EAI_AGAIN") return db + "host not found. Copy the Transaction pooler string again from Supabase.";
+  if (e?.code === "ECONNREFUSED" || e?.code === "ETIMEDOUT" || /timeout/i.test(msg)) return db + "connection refused or timed out. Use the Transaction pooler string (port 6543).";
+  if (/invalid url|invalid connection string|getaddrinfo/i.test(msg)) return db + "the connection string is malformed.";
+  return null;
 }
 
 // Small shared zod pieces.
