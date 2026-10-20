@@ -14,6 +14,23 @@ Browser ──► Vercel CDN (apps/web/dist — the React app)
 Vercel Cron ──► /api/cron/daily-reports (20:00 IST) · /api/cron/maintenance
 ```
 
+## Who owns which account
+
+| Service | Account | Used for |
+|---|---|---|
+| GitHub | Sehej Sharma (`sehejsharm/crm-focusrealm`) | The code |
+| Vercel | Sehej Sharma | Hosting the app and API |
+| Supabase | Ali Electricwala ("Alielectricwala's Project") | The Postgres database only (no Supabase Storage) |
+| Cloudflare | Focus Realm's Cloudflare account | R2 bucket `crm-call-recordings`, all call recordings |
+| Google AI Studio | Focus Realm's Google account | Gemini (`GEMINI_API_KEY`) |
+| Deepgram | Focus Realm's Deepgram account | Transcription (`DEEPGRAM_API_KEY`) |
+
+The Supabase database sits in a different person's account from GitHub and
+Vercel. Vercel reaches it only through `DATABASE_URL`, so the two accounts
+never need to be linked. Get the connection string from Ali Electricwala's
+Supabase login. Don't add Supabase through Vercel's integrations, because
+that would create a new, empty database in Sehej Sharma's account.
+
 ## 1. Supabase
 
 1. Create a project (choose **Mumbai / ap-south-1**, next to your users).

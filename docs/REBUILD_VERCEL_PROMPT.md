@@ -10,8 +10,9 @@ Vercel settings were lost. Saved keys can't be read back from Vercel, so the
 prompt creates fresh API keys. Everyone has to sign in again once, because
 the login secret changes.
 
-Open **Claude in Chrome**. Sign in to **GitHub, Vercel, Supabase, Cloudflare,
-Google (AI Studio) and Deepgram** in the same browser. Fill in MY DETAILS,
+Open **Claude in Chrome**. Sign in to **GitHub and Vercel as Sehej Sharma**,
+**Supabase as Ali Electricwala**, and to Cloudflare, Google (AI Studio) and
+Deepgram, all in the same browser. Fill in MY DETAILS,
 then paste everything inside the box. Claude stops and asks you whenever a
 password is needed, and you type it yourself.
 
@@ -29,10 +30,21 @@ MY DETAILS (only used if the CRM asks for first-time setup):
   Email: ____
   Title: ____   (e.g. Co-founder & CEO)
 
+ACCOUNTS (they belong to different people; use the right one for each)
+- GitHub: Sehej Sharma's account (sehejsharm). Repo sehejsharm/crm-focusrealm.
+- Vercel: Sehej Sharma's account. Create the project there, not in any
+  other Vercel account or team.
+- Supabase: Ali Electricwala's account. Only the database lives there.
+- Cloudflare (R2 recordings), Google AI Studio (Gemini) and Deepgram: the
+  accounts I'm signed in to.
+If the wrong account is signed in for any of these, stop and ask me to
+switch.
+
 FACTS
 - GitHub repo: sehejsharm/crm-focusrealm
 - Production branch: claude/zealous-darwin-565r0v
-- Supabase project: "Alielectricwala's Project" (ref lvfdrhvpukkdmxziwtnn).
+- Supabase project (Ali Electricwala's account): "Alielectricwala's Project"
+  (ref lvfdrhvpukkdmxziwtnn).
   The HR console shares it. Never change or reset anything there.
 - Cloudflare R2 bucket: crm-call-recordings
 - Don't touch the Vercel projects "focusrealm" or "focusrealm-fzi2". They
