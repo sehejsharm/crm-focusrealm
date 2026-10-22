@@ -16,15 +16,21 @@ const MEETING_FROM = `from crm_meetings m join crm_contacts c on c.id = m.contac
   left join crm_users l on l.id = m.legion_user_id left join crm_users s on s.id = m.sales_user_id`;
 
 export async function scheduleMeeting(user: AuthUser, input: {
-  contactId: string; stage: "legion_meet_1" | "legion_meet_2"; scheduledAt: string; durationMin?: number;
+  contactId: string; stage: "legion_meet_1" | "legion_meet_2" | "legion_meet_3"; scheduledAt: string; durationMin?: number;
   location?: string | null; legionUserId?: string | null; notes?: string | null;
 }) {
-  if (user.role !== "legion" && user.role !== "founder") throw forbidden("Legion meetings are booked by the Legion team");
+  if (!["legion", "founder", "sales_head"].includes(user.role)) throw forbidden("Legion meetings are booked by the Legion team");
   const c = await getContactRow(input.contactId);
   const handoff = await db.maybe(`select status from crm_handoffs where contact_id = $1 order by created_at desc limit 1`, [c.id]);
-  if (handoff?.status !== "accepted" && user.role !== "founder") throw badRequest("Accept the handoff before booking a Legion meeting");
-  if (input.stage === "legion_meet_2" && !["legion_meet_1", "legion_meet_2"].includes(c.stage)) {
+  if (handoff?.status !== "accepted" && user.role === "legion") throw badRequest("Accept the handoff before booking a Legion meeting");
+  // Meetings follow 1 → 2 → 3, except that founders and sales heads may book
+  // any of them directly (prospects who come in through connections).
+  const direct = user.role === "founder" || user.role === "sales_head";
+  if (!direct && input.stage === "legion_meet_2" && !["legion_meet_1", "legion_meet_2", "legion_meet_3"].includes(c.stage)) {
     throw badRequest("Hold Legion Meet 1 first");
+  }
+  if (!direct && input.stage === "legion_meet_3" && !["legion_meet_2", "legion_meet_3"].includes(c.stage)) {
+    throw badRequest("Hold Legion Meet 2 first");
   }
   const when = new Date(input.scheduledAt);
   if (Number.isNaN(when.getTime())) throw badRequest("Pick a valid date and time");

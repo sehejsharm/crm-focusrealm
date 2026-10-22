@@ -26,6 +26,7 @@ export default function LegionHome() {
     { label: "Qualified", value: stage("qualified") },
     { label: "Legion Meet 1", value: stage("legion_meet_1") },
     { label: "Legion Meet 2", value: stage("legion_meet_2") },
+    { label: "Legion Meet 3", value: stage("legion_meet_3") },
     { label: "Won · 30 days", value: d?.won.month ?? 0, win: true },
   ];
 

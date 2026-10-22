@@ -170,10 +170,12 @@ api.post("/contacts", async (req, res) => {
       source: z.string().max(100).optional().nullable(),
       notes: z.string().max(5000).optional().nullable(),
       ownerId: zId.optional().nullable(),
+      stage: z.enum(STAGES).optional(),
+      legionUserId: zId.optional().nullable(),
     }),
     req.body,
   );
-  res.json({ contact: await createContact(req.user!, body, body.ownerId) });
+  res.json({ contact: await createContact(req.user!, body, body.ownerId, { stage: body.stage, legionUserId: body.legionUserId }) });
 });
 
 const ImportRow = z.object({
@@ -516,7 +518,7 @@ api.post("/meetings", async (req, res) => {
   const body = parse(
     z.object({
       contactId: zId,
-      stage: z.enum(["legion_meet_1", "legion_meet_2"]),
+      stage: z.enum(["legion_meet_1", "legion_meet_2", "legion_meet_3"]),
       scheduledAt: z.string(),
       durationMin: z.number().int().min(10).max(480).optional(),
       location: z.string().max(500).optional().nullable(),

@@ -7,6 +7,7 @@ export const STAGES = [
   { key: "qualified", label: "Qualified", hint: "Qualification criteria met" },
   { key: "legion_meet_1", label: "Legion Meet 1", hint: "First meeting stage" },
   { key: "legion_meet_2", label: "Legion Meet 2", hint: "Second meeting stage" },
+  { key: "legion_meet_3", label: "Legion Meet 3", hint: "Third meeting stage" },
 ] as const;
 
 export const STATUS_LABEL: Record<string, string> = {

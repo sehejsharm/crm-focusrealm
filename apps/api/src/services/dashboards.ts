@@ -52,7 +52,7 @@ export async function repDashboard(user: AuthUser) {
     dailySeries(user.id, 14),
     db.one(
       `select count(*) as active, count(*) filter (where stage = 'qualified') as qualified,
-         count(*) filter (where stage in ('legion_meet_1','legion_meet_2')) as with_legion
+         count(*) filter (where stage in ('legion_meet_1','legion_meet_2','legion_meet_3')) as with_legion
        from crm_contacts where owner_id = $1 and status not in ('closed_lost','disqualified')`,
       [user.id],
     ),
@@ -131,7 +131,7 @@ export async function founderDashboard() {
     db.many(
       `select coalesce(nullif(campaign, ''), 'No campaign') as name, count(*)::int as total,
          count(*) filter (where stage <> 'prospect')::int as qualified_plus,
-         count(*) filter (where stage in ('legion_meet_1','legion_meet_2'))::int as legion,
+         count(*) filter (where stage in ('legion_meet_1','legion_meet_2','legion_meet_3'))::int as legion,
          count(*) filter (where status = 'closed_won')::int as won
        from crm_contacts group by 1 order by total desc limit 12`,
     ),
@@ -224,7 +224,7 @@ export async function founderDashboard() {
 /** Legion portal: their pipeline, meetings, inbox, and the sales team's work. */
 export async function legionDashboard(user: AuthUser) {
   const [pipeline, handoffs, meetings, team, mine, won] = await Promise.all([
-    db.many(`select stage, count(*)::int as count from crm_contacts where stage in ('qualified','legion_meet_1','legion_meet_2') and status not in ('closed_lost') group by stage`),
+    db.many(`select stage, count(*)::int as count from crm_contacts where stage in ('qualified','legion_meet_1','legion_meet_2','legion_meet_3') and status not in ('closed_lost') group by stage`),
     db.many(
       `select h.*, c.full_name as contact_name, c.designation, c.temperature, co.name as company_name, f.full_name as from_name, f.avatar_hue as from_hue
        from crm_handoffs h join crm_contacts c on c.id = h.contact_id left join crm_companies co on co.id = c.company_id
@@ -239,7 +239,7 @@ export async function legionDashboard(user: AuthUser) {
     teamDashboard(),
     db.one(
       `select count(*) filter (where status = 'closed_won')::int as won, count(*) filter (where status = 'closed_lost')::int as lost,
-         count(*) filter (where stage in ('legion_meet_1','legion_meet_2') and status = 'handed_off')::int as open
+         count(*) filter (where stage in ('legion_meet_1','legion_meet_2','legion_meet_3') and status = 'handed_off')::int as open
        from crm_contacts where legion_owner_id = $1`,
       [user.id],
     ),

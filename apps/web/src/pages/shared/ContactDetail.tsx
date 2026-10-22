@@ -60,6 +60,11 @@ export default function ContactDetail() {
     onSuccess: () => { setNote(""); refresh(); },
   });
   const completeTask = useMutation({ mutationFn: (tid: string) => api.patch(`/tasks/${tid}`, { status: "done" }), onSuccess: refresh });
+  const moveStage = useMutation({
+    mutationFn: (stage: string) => api.post(`/contacts/${id}/stage`, { stage }),
+    onSuccess: (_r, stage) => { toast({ kind: "success", title: `Moved to ${STAGES.find((s) => s.key === stage)?.label ?? stage}` }); refresh(); },
+    onError: (e) => toast({ kind: "error", title: "Couldn't move", body: (e as Error).message }),
+  });
 
   if (q.isLoading) return <div className="space-y-4"><Skeleton className="h-48" /><Skeleton className="h-96" /></div>;
   if (q.error) return <Empty icon={<UserRound className="size-6" />} title="Can't open this prospect" body={(q.error as Error).message} action={<Button onClick={() => navigate(-1)}>Go back</Button>} />;
@@ -118,14 +123,26 @@ export default function ContactDetail() {
                   <Button size="sm" variant="soft" icon={<Handshake className="size-4" />} onClick={() => setModal("handoff")}>Hand off to Legion</Button>
                 )}
                 {manager && <Button size="sm" icon={<Shuffle className="size-4" />} onClick={() => setModal("reassign")}>Reassign</Button>}
-                {legionish && ["qualified", "legion_meet_1", "legion_meet_2"].includes(c.stage) && <Button size="sm" variant="soft" icon={<CalendarPlus className="size-4" />} onClick={() => setModal("meeting")}>Book Legion meeting</Button>}
-                {legionish && ["legion_meet_1", "legion_meet_2"].includes(c.stage) && !c.status.startsWith("closed") && <Button size="sm" variant="success" icon={<Trophy className="size-4" />} onClick={() => setModal("close")}>Close</Button>}
+                {manager && !c.status.startsWith("closed") && (
+                  <Select
+                    aria-label="Move to stage"
+                    value=""
+                    disabled={moveStage.isPending}
+                    onChange={(e) => e.target.value && moveStage.mutate(e.target.value)}
+                    className="h-9 w-auto text-sm"
+                  >
+                    <option value="">Move to…</option>
+                    {STAGES.filter((s) => s.key !== c.stage).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </Select>
+                )}
+                {(legionish || manager) && ["qualified", "legion_meet_1", "legion_meet_2", "legion_meet_3"].includes(c.stage) && <Button size="sm" variant="soft" icon={<CalendarPlus className="size-4" />} onClick={() => setModal("meeting")}>Book Legion meeting</Button>}
+                {legionish && ["legion_meet_1", "legion_meet_2", "legion_meet_3"].includes(c.stage) && !c.status.startsWith("closed") && <Button size="sm" variant="success" icon={<Trophy className="size-4" />} onClick={() => setModal("close")}>Close</Button>}
               </div>
             </div>
           </div>
 
           {/* Milestones */}
-          <div className="relative mt-6 grid grid-cols-4 gap-2">
+          <div className="relative mt-6 grid grid-cols-5 gap-2">
             {STAGES.map((s, i) => (
               <div key={s.key} className="relative">
                 <div className="h-2 overflow-hidden rounded-full bg-line/70">
@@ -403,7 +420,7 @@ function MeetingModal({ open, onClose, contact, onDone }: { open: boolean; onClo
   const d = new Date();
   d.setDate(d.getDate() + 2);
   d.setHours(16, 0, 0, 0);
-  const [stage, setStage] = useState(contact.stage === "legion_meet_1" ? "legion_meet_2" : "legion_meet_1");
+  const [stage, setStage] = useState(contact.stage === "legion_meet_2" ? "legion_meet_3" : contact.stage === "legion_meet_1" ? "legion_meet_2" : "legion_meet_1");
   const [when, setWhen] = useState(localInput(d));
   const [location, setLocation] = useState("Google Meet");
   const [notes, setNotes] = useState("");
@@ -411,7 +428,7 @@ function MeetingModal({ open, onClose, contact, onDone }: { open: boolean; onClo
   return (
     <Modal open={open} onClose={onClose} title="Book a Legion meeting" icon={<CalendarPlus className="size-5" />} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={m.isPending} onClick={() => m.mutate()}>Book meeting</Button></>}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Meeting"><Select value={stage} onChange={(e) => setStage(e.target.value)}><option value="legion_meet_1">Legion Meet 1</option><option value="legion_meet_2">Legion Meet 2</option></Select></Field>
+        <Field label="Meeting"><Select value={stage} onChange={(e) => setStage(e.target.value)}><option value="legion_meet_1">Legion Meet 1</option><option value="legion_meet_2">Legion Meet 2</option><option value="legion_meet_3">Legion Meet 3</option></Select></Field>
         <Field label="When"><Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} /></Field>
         <Field label="Where" className="sm:col-span-2"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
         <Field label="Agenda" className="sm:col-span-2"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>

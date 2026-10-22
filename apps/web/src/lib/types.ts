@@ -37,7 +37,7 @@ export interface Meta {
   setupEnabled: boolean;
 }
 
-export type Stage = "prospect" | "qualified" | "legion_meet_1" | "legion_meet_2";
+export type Stage = "prospect" | "qualified" | "legion_meet_1" | "legion_meet_2" | "legion_meet_3";
 
 export interface Contact {
   id: string;

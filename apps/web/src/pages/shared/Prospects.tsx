@@ -241,18 +241,33 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
 function AddProspect({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [f, setF] = useState({ full_name: "", company: "", designation: "", phone: "", email: "", city: "", campaign: "", segment: "" });
-  const set = (k: keyof typeof f) => (e: ChangeEvent<HTMLInputElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const { user } = useAuth();
+  const canPlace = user?.role === "founder" || user?.role === "sales_head" || user?.role === "legion";
+  const blank = { full_name: "", company: "", designation: "", phone: "", email: "", city: "", campaign: "", segment: "", source: "", stage: "prospect", ownerId: "", legionUserId: "" };
+  const [f, setF] = useState(blank);
+  const set = (k: keyof typeof f) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const people = useQuery({ queryKey: ["users"], queryFn: () => api.get<{ users: any[] }>("/users"), enabled: open && canPlace && user?.role !== "legion" });
+  const toLegion = f.stage.startsWith("legion_meet");
+  const stages = STAGES.filter((s) => user?.role !== "legion" || s.key !== "qualified");
   const save = useMutation({
-    mutationFn: () => api.post("/contacts", { ...f, email: f.email || null }),
+    mutationFn: () => api.post<{ contact: { id: string } }>("/contacts", {
+      ...f,
+      email: f.email || null,
+      source: f.source || (f.stage === "prospect" ? null : "Connection / referral"),
+      ownerId: f.ownerId || null,
+      legionUserId: toLegion ? f.legionUserId || null : null,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["contacts"] });
-      toast({ kind: "success", title: `${f.full_name} added` });
-      setF({ full_name: "", company: "", designation: "", phone: "", email: "", city: "", campaign: "", segment: "" });
+      qc.invalidateQueries({ queryKey: ["board"] });
+      const where = STAGES.find((s) => s.key === f.stage)?.label ?? "Prospect";
+      toast({ kind: "success", title: `${f.full_name} added`, body: f.stage === "prospect" ? undefined : `Straight to ${where}` });
+      setF(blank);
       onClose();
     },
     onError: (e) => toast({ kind: "error", title: "Couldn't add", body: (e as Error).message }),
   });
+  const users = people.data?.users ?? [];
   return (
     <Modal open={open} onClose={onClose} title="Add a prospect" icon={<Users className="size-5" />} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={save.isPending} disabled={!f.full_name || !f.phone} onClick={() => save.mutate()}>Add prospect</Button></>}>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -264,6 +279,30 @@ function AddProspect({ open, onClose }: { open: boolean; onClose: () => void }) 
         <Field label="City"><Input value={f.city} onChange={set("city")} /></Field>
         <Field label="Campaign"><Input value={f.campaign} onChange={set("campaign")} /></Field>
         <Field label="Segment"><Input value={f.segment} onChange={set("segment")} /></Field>
+        <Field label="Source"><Input value={f.source} onChange={set("source")} placeholder="e.g. Connection — referred by Rohan" /></Field>
+        {canPlace && (
+          <Field label="Start at stage" hint="Warm introductions can go straight to a Legion meeting.">
+            <Select value={f.stage} onChange={set("stage")}>
+              {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </Select>
+          </Field>
+        )}
+        {canPlace && user?.role !== "legion" && (
+          <Field label="Salesperson (optional)">
+            <Select value={f.ownerId} onChange={set("ownerId")}>
+              <option value="">Unassigned</option>
+              {users.filter((u) => u.role === "sales_rep" || u.role === "sales_head").map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </Select>
+          </Field>
+        )}
+        {toLegion && user?.role !== "legion" && (
+          <Field label="Legion member (optional)">
+            <Select value={f.legionUserId} onChange={set("legionUserId")}>
+              <option value="">Decide later</option>
+              {users.filter((u) => u.role === "legion").map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </Select>
+          </Field>
+        )}
       </div>
     </Modal>
   );

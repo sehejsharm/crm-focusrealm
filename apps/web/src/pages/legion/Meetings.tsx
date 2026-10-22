@@ -65,7 +65,7 @@ function MeetingRow({ m }: { m: any }) {
         <p className="text-lg font-bold text-fg">{fmtTime(m.scheduled_at)}</p>
         <p className="text-[11px] text-muted">{m.duration_min} min</p>
       </div>
-      <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 text-xs font-black text-white shadow-brand">{m.stage === "legion_meet_1" ? "M1" : "M2"}</span>
+      <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 text-xs font-black text-white shadow-brand">{m.stage === "legion_meet_1" ? "M1" : m.stage === "legion_meet_2" ? "M2" : "M3"}</span>
       <div className="min-w-0 flex-1">
         <Link to={`${base}/contacts/${m.contact_id}`} className="block truncate font-semibold text-fg hover:text-accent">{m.contact_name} <span className="font-normal text-muted">· {m.company_name}</span></Link>
         <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">{label(m.stage)} · {m.legion_name ?? "Legion"} · from {m.sales_name ?? "—"}{m.location && <span className="flex items-center gap-1"><MapPin className="size-3" />{m.location}</span>}</p>

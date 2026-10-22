@@ -17,6 +17,7 @@ const COLUMN_STYLE: Record<string, string> = {
   qualified: "from-brand-400/40 to-brand-500/30",
   legion_meet_1: "from-brand-500/40 to-brand-700/30",
   legion_meet_2: "from-brand-700/40 to-brand-900/30",
+  legion_meet_3: "from-brand-800/40 to-brand-950/30",
 };
 
 /**
@@ -64,10 +65,10 @@ export default function Pipeline() {
         actions={user?.role !== "sales_rep" && <Tabs value={scope} onChange={setScope} items={[{ value: "all", label: "Whole team" }, { value: "mine", label: "Mine" }]} />}
       />
       {board.isLoading ? (
-        <div className="grid gap-4 lg:grid-cols-4">{STAGES.map((s) => <Skeleton key={s.key} className="h-96" />)}</div>
+        <div className="grid gap-4 lg:grid-cols-5">{STAGES.map((s) => <Skeleton key={s.key} className="h-96" />)}</div>
       ) : (
         <LayoutGroup>
-          <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-4 lg:mx-0 lg:grid lg:grid-cols-4 lg:overflow-visible lg:px-0">
+          <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-4 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0">
             {STAGES.map((stage, ci) => {
               const cards = rows.filter((r) => r.stage === stage.key);
               const active = over === stage.key && dragId;

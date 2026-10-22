@@ -424,7 +424,7 @@ async function assertCanPlay(user: AuthUser, call: any) {
   const contact = await getContactRow(call.contact_id);
   const allowed =
     call.user_id === user.id || user.role === "founder" || user.role === "sales_head" ||
-    (user.role === "legion" && ["qualified", "legion_meet_1", "legion_meet_2"].includes(contact.stage));
+    (user.role === "legion" && ["qualified", "legion_meet_1", "legion_meet_2", "legion_meet_3"].includes(contact.stage));
   if (!allowed) throw forbidden("You can't play this recording");
   if (!call.recording_path) throw notFound("No recording for this call");
 }

@@ -125,9 +125,10 @@ export default function Command() {
             {d ? (
               <Funnel steps={[
                 { label: "Prospect", value: stage("prospect"), hint: "in outreach" },
-                { label: "Qualified", value: stage("qualified") + stage("legion_meet_1") + stage("legion_meet_2") },
-                { label: "Legion Meet 1", value: stage("legion_meet_1") + stage("legion_meet_2") },
-                { label: "Legion Meet 2", value: stage("legion_meet_2") },
+                { label: "Qualified", value: stage("qualified") + stage("legion_meet_1") + stage("legion_meet_2") + stage("legion_meet_3") },
+                { label: "Legion Meet 1", value: stage("legion_meet_1") + stage("legion_meet_2") + stage("legion_meet_3") },
+                { label: "Legion Meet 2", value: stage("legion_meet_2") + stage("legion_meet_3") },
+                { label: "Legion Meet 3", value: stage("legion_meet_3") },
                 { label: "Won", value: won },
               ]} />
             ) : <Skeleton className="h-64" />}

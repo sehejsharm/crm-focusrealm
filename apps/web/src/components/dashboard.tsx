@@ -118,7 +118,7 @@ export function Agenda({
                       <span className="block truncate text-sm font-semibold text-fg group-hover:text-accent">{m.contact_name}</span>
                       <span className="block truncate text-xs text-muted">{m.company_name ?? "—"}{who === "sales" && m.sales_name ? ` · booked by ${m.sales_name.split(" ")[0]}` : m.legion_name ? ` · ${m.legion_name.split(" ")[0]}` : ""}</span>
                     </span>
-                    <span className="rounded-lg bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-soft-fg">{m.stage === "legion_meet_2" ? "Meet 2" : "Meet 1"}</span>
+                    <span className="rounded-lg bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-soft-fg">{m.stage === "legion_meet_3" ? "Meet 3" : m.stage === "legion_meet_2" ? "Meet 2" : "Meet 1"}</span>
                   </Link>
                 ))}
               </div>

@@ -6,7 +6,8 @@ import { activity, audit, notify, notifyRoles } from "../lib/record.js";
 import { broadcast } from "../lib/bus.js";
 import { getSetting } from "./settings.js";
 
-export const STAGES = ["prospect", "qualified", "legion_meet_1", "legion_meet_2"] as const;
+export const STAGES = ["prospect", "qualified", "legion_meet_1", "legion_meet_2", "legion_meet_3"] as const;
+export const LEGION_STAGES: readonly string[] = ["legion_meet_1", "legion_meet_2", "legion_meet_3"];
 export type Stage = (typeof STAGES)[number];
 
 export const STATUSES = [
@@ -61,7 +62,7 @@ export function canView(user: AuthUser, c: { owner_id: string | null }) {
 /** Can this person work the prospect (call, notes, status)? */
 export function canWork(user: AuthUser, c: { owner_id: string | null; legion_owner_id?: string | null; stage?: string }) {
   if (user.role === "founder" || user.role === "sales_head") return true;
-  if (user.role === "legion") return c.stage === "legion_meet_1" || c.stage === "legion_meet_2" || c.legion_owner_id === user.id;
+  if (user.role === "legion") return LEGION_STAGES.includes(c.stage ?? "") || c.legion_owner_id === user.id;
   return c.owner_id === user.id;
 }
 
@@ -216,7 +217,20 @@ export interface ContactInput {
   notes?: string | null;
 }
 
-export async function createContact(user: AuthUser, input: ContactInput, ownerId?: string | null) {
+export async function createContact(
+  user: AuthUser,
+  input: ContactInput,
+  ownerId?: string | null,
+  start?: { stage?: Stage; legionUserId?: string | null },
+) {
+  const stage: Stage = start?.stage ?? "prospect";
+  const toLegion = LEGION_STAGES.includes(stage);
+  if (stage !== "prospect" && !["founder", "sales_head", "legion"].includes(user.role)) {
+    throw forbidden("Only founders, sales heads and the Legion team can add a prospect past the first stage");
+  }
+  if (stage === "qualified" && user.role === "legion") throw forbidden();
+  const legionOwner = toLegion ? (start?.legionUserId ?? (user.role === "legion" ? user.id : null)) : null;
+  const status: Status = toLegion ? "handed_off" : stage === "qualified" ? "qualified" : "new";
   const key = phoneKey(input.phone);
   if (!key) throw badRequest("A valid phone number is needed to call this prospect");
   const dup = await db.maybe(`select id, full_name from crm_contacts where phone_key = $1`, [key]);
@@ -226,12 +240,13 @@ export async function createContact(user: AuthUser, input: ContactInput, ownerId
     const companyId = await upsertCompany(q, input.company, input);
     const row = await db.one<{ id: string }>(
       `insert into crm_contacts (company_id, full_name, designation, phone, phone_key, alt_phone, email, email_key, city,
-         source, campaign, segment, tags, notes, owner_id, created_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14,$15,$16) returning id`,
+         source, campaign, segment, tags, notes, owner_id, created_by, stage, status, legion_owner_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14,$15,$16,$17,$18,$19) returning id`,
       [
         companyId, input.full_name.trim(), input.designation ?? null, input.phone ?? null, key, input.alt_phone ?? null,
         input.email ?? null, emailKey(input.email), input.city ?? null, input.source ?? "Manual entry",
         input.campaign ?? null, input.segment ?? null, input.tags ?? [], input.notes ?? null, owner, user.id,
+        stage, status, legionOwner,
       ],
       q,
     );
@@ -239,6 +254,16 @@ export async function createContact(user: AuthUser, input: ContactInput, ownerId
       await q.query(`insert into crm_assignments (contact_id, user_id, assigned_by, kind) values ($1, $2, $3, 'manual')`, [row.id, owner, user.id]);
     }
     await activity(row.id, user.id, "created", "Prospect created", null, {}, q);
+    if (stage !== "prospect") {
+      if (toLegion) {
+        await q.query(
+          `insert into crm_handoffs (contact_id, from_user_id, status, note, decided_by, decided_at)
+           values ($1, $2, 'accepted', $3, $4, now())`,
+          [row.id, owner ?? user.id, `Added straight to ${label(stage)}`, user.id],
+        );
+      }
+      await activity(row.id, user.id, "stage", `Added straight to ${label(stage)}`, null, { from: "prospect", to: stage }, q);
+    }
     return row.id;
   });
   return getContactRow(id);
@@ -427,35 +452,39 @@ export async function moveStage(user: AuthUser, id: string, stage: Stage, note?:
   if (c.stage === stage) return presentContact(c);
   if (stage === "qualified") {
     if (!canWork(user, c)) throw forbidden();
-    if (["legion_meet_1", "legion_meet_2"].includes(c.stage) && user.role !== "founder") {
+    if (LEGION_STAGES.includes(c.stage) && user.role !== "founder") {
       throw forbidden("Only founders can pull a prospect back from Legion");
     }
     return changeStatusTo(user, c, "qualified", "qualified", note);
   }
   if (stage === "prospect") {
     if (user.role === "sales_rep" && c.owner_id !== user.id) throw forbidden();
-    if (["legion_meet_1", "legion_meet_2"].includes(c.stage) && user.role !== "founder") {
+    if (LEGION_STAGES.includes(c.stage) && user.role !== "founder") {
       throw forbidden("Only founders can pull a prospect back from Legion");
     }
     return changeStatusTo(user, c, "follow_up", "prospect", note);
   }
   // Legion stages.
-  if (user.role !== "legion" && user.role !== "founder") throw forbidden("Legion stages are moved by the Legion team");
-  if (c.stage === "prospect" && user.role !== "founder") throw badRequest("Qualify and hand off the prospect first");
+  // Founders and sales heads can place a prospect straight into a Legion
+  // meeting (e.g. a warm introduction); the Legion team moves its own.
+  const direct = user.role === "founder" || user.role === "sales_head";
+  if (user.role !== "legion" && !direct) throw forbidden("Legion stages are moved by the Legion team");
+  if (c.stage === "prospect" && !direct) throw badRequest("Qualify and hand off the prospect first");
   const handoff = await db.maybe(`select id, status from crm_handoffs where contact_id = $1 order by created_at desc limit 1`, [id]);
   if (!handoff || handoff.status !== "accepted") {
-    if (user.role !== "founder") throw badRequest("Accept the handoff before moving it into Legion meetings");
+    if (!direct) throw badRequest("Accept the handoff before moving it into Legion meetings");
     await db.query(
       `insert into crm_handoffs (contact_id, from_user_id, status, note, decided_by, decided_at)
-       values ($1, $2, 'accepted', 'Moved by a founder from the board', $3, now())`,
-      [id, c.owner_id, user.id],
+       values ($1, $2, 'accepted', $4, $3, now())`,
+      [id, c.owner_id ?? user.id, user.id, `Moved straight to ${label(stage)} by ${user.role === "founder" ? "a founder" : "a sales head"}`],
     );
   }
   return changeStatusTo(user, c, "handed_off", stage, note, user.role === "legion" ? user.id : c.legion_owner_id);
 }
 
 async function changeStatusTo(user: AuthUser, c: any, status: Status, stage: Stage, note?: string | null, legionOwner?: string | null) {
-  if (status === "qualified") await assertQualified(c);
+  // Founders and sales heads may qualify without the checklist (warm intros).
+  if (status === "qualified" && user.role !== "founder" && user.role !== "sales_head") await assertQualified(c);
   await db.query(
     `update crm_contacts set status = $2, stage = $3, legion_owner_id = coalesce($4, legion_owner_id), updated_at = now() where id = $1`,
     [c.id, status, stage, legionOwner ?? null],
@@ -557,6 +586,6 @@ const LABELS: Record<string, string> = {
   new: "New", outreach: "Outreach", follow_up: "Follow-up", qualification_review: "Qualification review",
   qualified: "Qualified", handoff_pending: "Handoff pending", handed_off: "With Legion", returned: "Returned",
   closed_won: "Won", closed_lost: "Lost", disqualified: "Disqualified", prospect: "Prospect",
-  legion_meet_1: "Legion Meet 1", legion_meet_2: "Legion Meet 2",
+  legion_meet_1: "Legion Meet 1", legion_meet_2: "Legion Meet 2", legion_meet_3: "Legion Meet 3",
 };
 export const label = (s: string) => LABELS[s] ?? s;
