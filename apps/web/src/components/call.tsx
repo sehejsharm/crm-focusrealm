@@ -55,7 +55,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const r = await api.post<{ call: Call }>("/calls", { contactId: contact.id });
+      const r = await api.post<{ call: Call }>("/calls", { contactId: contact.id }, { signal: AbortSignal.timeout(25_000) });
       setTarget(contact);
       setActive(r.call);
       setMinimised(false);
