@@ -143,17 +143,33 @@ api.get("/contacts/facets", async (req, res) => res.json(await facets(req.user!)
 
 api.get("/contacts/board", async (req, res) => {
   const mine = req.user!.role === "sales_rep" || req.query.mine === "1";
-  const rows = await db.many(
-    `select c.id, c.full_name, c.designation, c.stage, c.status, c.temperature, c.segment, c.campaign, c.last_call_outcome,
+  const me = mine ? req.user!.id : null;
+  const cols = `c.id, c.full_name, c.designation, c.stage, c.status, c.temperature, c.segment, c.campaign, c.last_call_outcome,
        c.last_contacted_at, c.next_action_at, c.owner_id, c.legion_owner_id, co.name as company_name, o.full_name as owner_name, o.avatar_hue as owner_hue,
-       (select m.scheduled_at from crm_meetings m where m.contact_id = c.id and m.status = 'scheduled' order by m.scheduled_at limit 1) as meeting_at
-     from crm_contacts c left join crm_companies co on co.id = c.company_id left join crm_users o on o.id = c.owner_id
-     where c.status not in ('disqualified','closed_lost') and ($1::uuid is null or c.owner_id = $1 or c.legion_owner_id = $1)
+       (select m.scheduled_at from crm_meetings m where m.contact_id = c.id and m.status = 'scheduled' order by m.scheduled_at limit 1) as meeting_at`;
+  const from = `from crm_contacts c left join crm_companies co on co.id = c.company_id left join crm_users o on o.id = c.owner_id
+     where c.status not in ('disqualified','closed_lost')`;
+  // Everything that is assigned or past the first stage…
+  const worked = await db.many(
+    `select ${cols} ${from} and ($1::uuid is null or c.owner_id = $1 or c.legion_owner_id = $1)
        and (c.stage <> 'prospect' or c.owner_id is not null)
      order by c.updated_at desc limit 600`,
-    [mine ? req.user!.id : null],
+    [me],
   );
-  res.json({ rows });
+  // …plus unassigned prospects, newest first, so anything just added by hand
+  // or imported shows up on the board straight away. The full pool can be
+  // thousands of rows, so only the latest are listed; the count shows the rest.
+  let pool: any[] = [];
+  let poolTotal = 0;
+  if (!me && (req.user!.role === "founder" || req.user!.role === "sales_head")) {
+    pool = await db.many(
+      `select ${cols} ${from} and c.stage = 'prospect' and c.owner_id is null order by c.created_at desc limit 150`,
+    );
+    poolTotal = (await db.one<{ n: number }>(
+      `select count(*)::int as n from crm_contacts c where c.status not in ('disqualified','closed_lost') and c.stage = 'prospect' and c.owner_id is null`,
+    )).n;
+  }
+  res.json({ rows: [...pool, ...worked], poolTotal });
 });
 
 api.post("/contacts", async (req, res) => {

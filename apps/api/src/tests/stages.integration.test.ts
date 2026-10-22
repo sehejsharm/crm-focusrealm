@@ -85,3 +85,16 @@ test("a founder adds a connection straight into Legion Meet 1, then moves it to 
   assert.equal(after.phone, before.phone);
   assert.equal(after.company_name, before.company_name);
 });
+
+test("a prospect added by hand without a salesperson shows on the Pipeline board", async () => {
+  const added = await call("POST", "/api/contacts", { full_name: "Board Check", phone: "9810000009" });
+  assert.equal(added.status, 200, JSON.stringify(added.json));
+  const board = await call("GET", "/api/contacts/board");
+  assert.equal(board.status, 200);
+  const card = board.json.rows.find((r: any) => r.id === added.json.contact.id);
+  assert.ok(card, "the new prospect is on the board");
+  assert.equal(card.stage, "prospect");
+  assert.ok(board.json.poolTotal >= 1);
+  // Listed once only.
+  assert.equal(board.json.rows.filter((r: any) => r.id === added.json.contact.id).length, 1);
+});

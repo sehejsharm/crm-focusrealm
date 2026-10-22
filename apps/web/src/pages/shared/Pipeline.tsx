@@ -1,16 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { CalendarClock, GripVertical, KanbanSquare, Swords } from "lucide-react";
+import { CalendarClock, GripVertical, KanbanSquare, Plus, Swords } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { celebrate } from "../../components/motion";
 import { useToast } from "../../components/toast";
-import { Avatar, Badge, Empty, PageHeader, Skeleton, Tabs } from "../../components/ui";
+import { Avatar, Badge, Button, Empty, PageHeader, Skeleton, Tabs } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { cn, fmtDateTime, label, STAGES, STATUS_TONE } from "../../lib/format";
 import type { Contact } from "../../lib/types";
-import { Temperature } from "./Prospects";
+import { AddProspect, Temperature } from "./Prospects";
 
 const COLUMN_STYLE: Record<string, string> = {
   prospect: "from-sky/40 to-brand-300/30",
@@ -33,9 +33,12 @@ export default function Pipeline() {
   const [scope, setScope] = useState<"mine" | "all">(user?.role === "sales_rep" ? "mine" : "all");
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
+  // Founders, sales heads and Legion can add at any stage; salespeople add prospects.
+  const canPlace = user?.role === "founder" || user?.role === "sales_head" || user?.role === "legion";
   const base = `/${user?.portal}`;
 
-  const board = useQuery({ queryKey: ["board", scope], queryFn: () => api.get<{ rows: Contact[] }>(`/contacts/board${scope === "mine" ? "?mine=1" : ""}`) });
+  const board = useQuery({ queryKey: ["board", scope], queryFn: () => api.get<{ rows: Contact[]; poolTotal?: number }>(`/contacts/board${scope === "mine" ? "?mine=1" : ""}`) });
   const move = useMutation({
     mutationFn: ({ id, stage }: { id: string; stage: string }) => api.post(`/contacts/${id}/stage`, { stage }),
     onMutate: async ({ id, stage }) => {
@@ -56,13 +59,20 @@ export default function Pipeline() {
   });
 
   const rows = board.data?.rows ?? [];
+  // Unassigned prospects beyond the newest ones listed on the board.
+  const poolExtra = Math.max(0, (board.data?.poolTotal ?? 0) - rows.filter((r) => r.stage === "prospect" && !r.owner_id).length);
   return (
     <div>
       <PageHeader
         eyebrow="Pipeline"
         title="The board"
-        subtitle="Prospect → Qualified → Legion Meet 1 → Legion Meet 2. Drag a card to move it — the rules still apply."
-        actions={user?.role !== "sales_rep" && <Tabs value={scope} onChange={setScope} items={[{ value: "all", label: "Whole team" }, { value: "mine", label: "Mine" }]} />}
+        subtitle="Prospect → Qualified → Legion Meet 1 → 2 → 3. Drag a card to move it, or add someone straight into any column."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {user?.role !== "sales_rep" && <Tabs value={scope} onChange={setScope} items={[{ value: "all", label: "Whole team" }, { value: "mine", label: "Mine" }]} />}
+            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setAdding("prospect")}>Add prospect</Button>
+          </div>
+        }
       />
       {board.isLoading ? (
         <div className="grid gap-4 lg:grid-cols-5">{STAGES.map((s) => <Skeleton key={s.key} className="h-96" />)}</div>
@@ -102,9 +112,22 @@ export default function Pipeline() {
                       </p>
                       <p className="text-[11px] text-muted">{stage.hint}</p>
                     </div>
-                    <motion.span key={cards.length} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="grid min-w-8 place-items-center rounded-xl bg-surface px-2 py-1 text-sm font-bold text-fg shadow-xs ring-1 ring-line">
-                      {cards.length}
-                    </motion.span>
+                    <div className="flex items-center gap-1.5">
+                      {(stage.key === "prospect" || canPlace) && (
+                        <button
+                          type="button"
+                          onClick={() => setAdding(stage.key)}
+                          className="grid size-8 place-items-center rounded-xl bg-surface text-muted shadow-xs ring-1 ring-line transition hover:text-accent hover:ring-brand-300"
+                          aria-label={`Add a prospect to ${stage.label}`}
+                          title={`Add to ${stage.label}`}
+                        >
+                          <Plus className="size-4" />
+                        </button>
+                      )}
+                      <motion.span key={cards.length} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="grid min-w-8 place-items-center rounded-xl bg-surface px-2 py-1 text-sm font-bold text-fg shadow-xs ring-1 ring-line">
+                        {stage.key === "prospect" && poolExtra > 0 ? cards.length + poolExtra : cards.length}
+                      </motion.span>
+                    </div>
                   </header>
                   <div className="relative flex max-h-[68vh] min-h-48 flex-col gap-2 overflow-y-auto px-3 pb-3">
                     <AnimatePresence>
@@ -139,7 +162,7 @@ export default function Pipeline() {
                               <p className="truncate text-sm font-semibold text-fg hover:text-accent">{c.full_name}</p>
                               <p className="truncate text-xs text-muted">{c.company_name ?? "—"}</p>
                             </Link>
-                            {c.owner_name && <Avatar name={c.owner_name} hue={c.owner_hue} size={24} />}
+                            {c.owner_name ? <Avatar name={c.owner_name} hue={c.owner_hue} size={24} /> : c.stage === "prospect" && <Badge tone="warning">Unassigned</Badge>}
                           </div>
                           <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pl-6">
                             <Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{label(c.status)}</Badge>
@@ -152,6 +175,11 @@ export default function Pipeline() {
                       </motion.div>
                     ))}
                     {cards.length > 150 && <p className="py-2 text-center text-xs text-muted">+{cards.length - 150} more — filter in the database</p>}
+                    {stage.key === "prospect" && poolExtra > 0 && (
+                      <Link to={`${base}/allocation`} className="py-2 text-center text-xs font-semibold text-accent hover:underline">
+                        +{poolExtra.toLocaleString("en-IN")} older unassigned prospects. Allocate them →
+                      </Link>
+                    )}
                   </div>
                 </motion.section>
               );
@@ -159,6 +187,7 @@ export default function Pipeline() {
           </div>
         </LayoutGroup>
       )}
+      <AddProspect open={adding !== null} stage={adding ?? undefined} onClose={() => setAdding(null)} />
     </div>
   );
 }

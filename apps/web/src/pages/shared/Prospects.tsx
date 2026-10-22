@@ -238,13 +238,15 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
   );
 }
 
-function AddProspect({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AddProspect({ open, onClose, stage }: { open: boolean; onClose: () => void; stage?: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
   const canPlace = user?.role === "founder" || user?.role === "sales_head" || user?.role === "legion";
   const blank = { full_name: "", company: "", designation: "", phone: "", email: "", city: "", campaign: "", segment: "", source: "", stage: "prospect", ownerId: "", legionUserId: "" };
   const [f, setF] = useState(blank);
+  // Opened from a Pipeline column: start at that column's stage.
+  useEffect(() => { if (open) setF((x) => ({ ...x, stage: stage ?? "prospect" })); }, [open, stage]);
   const set = (k: keyof typeof f) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
   const people = useQuery({ queryKey: ["users"], queryFn: () => api.get<{ users: any[] }>("/users"), enabled: open && canPlace && user?.role !== "legion" });
   const toLegion = f.stage.startsWith("legion_meet");
