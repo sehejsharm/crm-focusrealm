@@ -8,13 +8,21 @@ export class ApiError extends Error {
 
 async function request<T>(method: string, url: string, body?: unknown, init?: RequestInit): Promise<T> {
   const isForm = typeof FormData !== "undefined" && body instanceof FormData;
-  const res = await fetch(`/api${url}`, {
-    method,
-    credentials: "include",
-    headers: body && !isForm ? { "Content-Type": "application/json" } : undefined,
-    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api${url}`, {
+      method,
+      credentials: "include",
+      headers: body && !isForm ? { "Content-Type": "application/json" } : undefined,
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+      ...init,
+    });
+  } catch (e) {
+    if ((e as Error).name === "TimeoutError" || (e as Error).name === "AbortError") {
+      throw new ApiError(0, "The server took too long to answer. Check your connection and try again.");
+    }
+    throw new ApiError(0, "Couldn't reach the server. Check your connection and try again.");
+  }
   const text = await res.text();
   const data = text ? safeJson(text) : null;
   if (!res.ok) {
@@ -34,7 +42,7 @@ function safeJson(t: string) {
 
 export const api = {
   get: <T,>(url: string) => request<T>("GET", url),
-  post: <T,>(url: string, body?: unknown) => request<T>("POST", url, body ?? {}),
+  post: <T,>(url: string, body?: unknown, init?: RequestInit) => request<T>("POST", url, body ?? {}, init),
   patch: <T,>(url: string, body?: unknown) => request<T>("PATCH", url, body ?? {}),
   put: <T,>(url: string, body?: unknown) => request<T>("PUT", url, body ?? {}),
   del: <T,>(url: string) => request<T>("DELETE", url),
