@@ -194,20 +194,25 @@ api.post("/contacts", async (req, res) => {
   res.json({ contact: await createContact(req.user!, body, body.ownerId, { stage: body.stage, legionUserId: body.legionUserId }) });
 });
 
+// Spreadsheet cells are messy: never reject a whole import over one long cell.
+// Numbers become text and anything over the limit is cut to fit.
+const cell = (max: number) =>
+  z.preprocess((v) => (v == null ? v : String(v).trim().slice(0, max)), z.string().optional().nullable());
+
 const ImportRow = z.object({
-  full_name: z.string().max(200).optional().default(""),
-  company: z.string().max(200).optional().nullable(),
-  designation: z.string().max(200).optional().nullable(),
-  phone: z.string().max(60).optional().nullable(),
-  alt_phone: z.string().max(60).optional().nullable(),
-  email: z.string().max(200).optional().nullable(),
-  city: z.string().max(100).optional().nullable(),
-  industry: z.string().max(100).optional().nullable(),
-  website: z.string().max(300).optional().nullable(),
-  source: z.string().max(100).optional().nullable(),
-  campaign: z.string().max(100).optional().nullable(),
-  segment: z.string().max(100).optional().nullable(),
-  notes: z.string().max(5000).optional().nullable(),
+  full_name: cell(200).transform((v) => v ?? ""),
+  company: cell(200),
+  designation: cell(200),
+  phone: cell(120),
+  alt_phone: cell(120),
+  email: cell(200),
+  city: cell(100),
+  industry: cell(100),
+  website: cell(300),
+  source: cell(100),
+  campaign: cell(100),
+  segment: cell(100),
+  notes: cell(5000),
 });
 
 api.post("/imports", manager, async (req, res) => {
