@@ -76,7 +76,7 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
   const [source, setSource] = useState("Database import");
   const [drag, setDrag] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
-  const [result, setResult] = useState<{ total: number; created: number; duplicates: number; invalid: number; issues: { row: number; reason: string; name?: string }[] } | null>(null);
+  const [result, setResult] = useState<{ total: number; created: number; duplicates: number; invalid: number; withoutPhone: number; issues: { row: number; reason: string; name?: string }[] } | null>(null);
 
   const reset = () => {
     setFile(null);
@@ -129,7 +129,7 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
       for (const f of FIELDS) if (map[f.key]) o[f.key] = (r[map[f.key]] ?? "").toString().trim() || null;
       return { ...o, full_name: o.full_name ?? "" };
     });
-    const total = { total: 0, created: 0, duplicates: 0, invalid: 0, issues: [] as { row: number; reason: string; name?: string }[] };
+    const total = { total: 0, created: 0, duplicates: 0, invalid: 0, withoutPhone: 0, issues: [] as { row: number; reason: string; name?: string }[] };
     setProgress(0);
     try {
       for (let i = 0; i < mapped.length; i += CHUNK) {
@@ -145,6 +145,7 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
         total.total += r.total;
         total.created += r.created;
         total.duplicates += r.duplicates;
+        total.withoutPhone += r.withoutPhone ?? 0;
         total.invalid += r.invalid;
         total.issues.push(...r.issues.map((x) => ({ ...x, row: x.row + i })));
         setProgress(Math.round(((i + part.length) / mapped.length) * 100));
@@ -278,14 +279,14 @@ export function ImportWizard({ open, onClose }: { open: boolean; onClose: () => 
                 <CheckCircle2 className="size-9" />
               </motion.div>
               <p className="mt-3 text-xl font-bold text-fg"><Counter value={result.created} /> prospects added</p>
-              <p className="text-sm text-muted">{result.created ? "Now hand them to the sales team." : "Nothing new — every row was already in the CRM or couldn't be used."}</p>
+              <p className="text-sm text-muted">{result.created ? `Now hand them to the sales team.${result.withoutPhone ? ` ${result.withoutPhone.toLocaleString()} have no valid number yet — find them under Prospects and add one before calling.` : ""}` : "Nothing new — every row was already in the CRM or couldn't be used."}</p>
             </div>
             <AllocateNow />
             <div className="grid grid-cols-3 gap-3">
               {[
                 ["Rows read", result.total, "brand"],
                 ["Duplicates skipped", result.duplicates, "warning"],
-                ["Invalid skipped", result.invalid, "danger"],
+                result.invalid ? ["Empty rows skipped", result.invalid, "danger"] : ["Added without a number", result.withoutPhone, "warning"],
               ].map(([l, v, t]) => (
                 <div key={l as string} className="rounded-2xl border border-line bg-surface p-4 text-center">
                   <p className={cn("text-2xl font-bold", t === "warning" ? "text-warning" : t === "danger" ? "text-danger" : "text-fg")}><Counter value={v as number} /></p>

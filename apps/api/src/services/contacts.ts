@@ -289,25 +289,34 @@ export async function importContacts(user: AuthUser, req: ImportRequest) {
   const issues: { row: number; reason: string; name?: string }[] = [];
   const seenPhones = new Set<string>();
   const seenEmails = new Set<string>();
-  const valid: (ContactInput & { phone_key: string; email_key: string | null; row: number })[] = [];
+  const valid: (ContactInput & { phone_key: string | null; email_key: string | null; row: number })[] = [];
 
   req.rows.forEach((r, i) => {
     const row = i + 2; // header is row 1 in a spreadsheet
-    const name = r.full_name?.trim();
-    if (!name) return issues.push({ row, reason: "Missing name" });
-    const pk = phoneKey(r.phone);
-    if (!pk) return issues.push({ row, name, reason: r.phone ? `Invalid phone "${r.phone}"` : "Missing phone" });
+    // Only a completely empty row is skipped: a prospect with a missing name
+    // or number is still worth having, and can be completed in the CRM.
+    const name = r.full_name?.trim() || r.company?.trim() || r.email?.trim() || "";
+    if (!name && !r.phone?.trim() && !r.alt_phone?.trim()) return issues.push({ row, reason: "Empty row" });
+    let pk = phoneKey(r.phone);
+    let phone = r.phone;
+    if (!pk && r.alt_phone) {
+      // Use the first valid number in the alternate column.
+      for (const part of r.alt_phone.split(/[\/,;|]|\s{2,}/)) {
+        const k = phoneKey(part);
+        if (k) { pk = k; phone = part.trim(); break; }
+      }
+    }
     const ek = emailKey(r.email);
-    if (seenPhones.has(pk)) return issues.push({ row, name, reason: "Duplicate phone within the file" });
+    if (pk && seenPhones.has(pk)) return issues.push({ row, name, reason: "Duplicate phone within the file" });
     if (ek && seenEmails.has(ek)) return issues.push({ row, name, reason: "Duplicate email within the file" });
-    seenPhones.add(pk);
+    if (pk) seenPhones.add(pk);
     if (ek) seenEmails.add(ek);
-    valid.push({ ...r, full_name: name, phone_key: pk, email_key: ek, row });
+    valid.push({ ...r, phone, full_name: name || "Unnamed prospect", phone_key: pk, email_key: ek, row });
   });
 
   // Existing numbers/emails in the database.
   const existingPhones = new Set(
-    (await db.many<{ phone_key: string }>(`select phone_key from crm_contacts where phone_key = any($1::text[])`, [valid.map((v) => v.phone_key)])).map((r) => r.phone_key),
+    (await db.many<{ phone_key: string }>(`select phone_key from crm_contacts where phone_key = any($1::text[])`, [valid.map((v) => v.phone_key).filter(Boolean)])).map((r) => r.phone_key),
   );
   const emails = valid.map((v) => v.email_key).filter(Boolean) as string[];
   const existingEmails = new Set(
@@ -316,7 +325,7 @@ export async function importContacts(user: AuthUser, req: ImportRequest) {
       : [],
   );
   const fresh = valid.filter((v) => {
-    if (existingPhones.has(v.phone_key)) {
+    if (v.phone_key && existingPhones.has(v.phone_key)) {
       issues.push({ row: v.row, name: v.full_name, reason: "Already in the CRM (same phone)" });
       return false;
     }
@@ -369,6 +378,7 @@ export async function importContacts(user: AuthUser, req: ImportRequest) {
     created: fresh.length,
     duplicates: duplicateCount,
     invalid: invalidCount,
+    withoutPhone: fresh.filter((f) => !f.phone_key).length,
     issues: issues.slice(0, 200),
   };
 }
