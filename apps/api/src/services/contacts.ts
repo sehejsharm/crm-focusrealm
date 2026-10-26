@@ -350,22 +350,52 @@ export async function importContacts(user: AuthUser, req: ImportRequest) {
       ],
       q,
     );
-    const companyIds = new Map<string, string | null>();
+    // Bulk statements: a row-by-row loop is thousands of round trips to the
+    // database, which on Vercel runs past the function's time limit.
+    const companies = new Map<string, { name: string; industry: string | null; city: string | null; website: string | null }>();
+    const keyOf = (name: string) => companyKey(name) || name.toLowerCase();
     for (const r of fresh) {
-      const cname = r.company?.trim() ?? "";
-      if (!companyIds.has(cname)) companyIds.set(cname, await upsertCompany(q, cname, r));
-      await q.query(
-        `insert into crm_contacts (company_id, full_name, designation, phone, phone_key, alt_phone, email, email_key, city,
-           source, campaign, segment, tags, notes, import_batch_id, created_by)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14,$15,$16)
-         on conflict (phone_key) where phone_key is not null do nothing`,
-        [
-          companyIds.get(cname) ?? null, r.full_name, r.designation ?? null, r.phone ?? null, r.phone_key, r.alt_phone ?? null,
-          r.email ?? null, r.email_key, r.city ?? null, r.source ?? req.source ?? "Import", r.campaign ?? req.campaign ?? null,
-          r.segment ?? req.segment ?? null, r.tags ?? [], r.notes ?? null, batch.id, user.id,
-        ],
-      );
+      const name = r.company?.trim();
+      if (name && !companies.has(keyOf(name))) {
+        companies.set(keyOf(name), { name, industry: r.industry ?? null, city: r.city ?? null, website: r.website ?? null });
+      }
     }
+    const companyIds = new Map<string, string>();
+    if (companies.size) {
+      const list = [...companies.entries()];
+      const rows = await db.many<{ id: string; name_key: string }>(
+        `insert into crm_companies (name, name_key, industry, city, website)
+         select * from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
+         on conflict (name_key) do update set
+           industry = coalesce(crm_companies.industry, excluded.industry),
+           city = coalesce(crm_companies.city, excluded.city),
+           website = coalesce(crm_companies.website, excluded.website)
+         returning id, name_key`,
+        [list.map(([, c]) => c.name), list.map(([k]) => k), list.map(([, c]) => c.industry), list.map(([, c]) => c.city), list.map(([, c]) => c.website)],
+        q,
+      );
+      for (const r of rows) companyIds.set(r.name_key, r.id);
+    }
+    const col = <T,>(f: (r: (typeof fresh)[number]) => T) => fresh.map(f);
+    await q.query(
+      `insert into crm_contacts (company_id, full_name, designation, phone, phone_key, alt_phone, email, email_key, city,
+         source, campaign, segment, tags, notes, import_batch_id, created_by)
+       select t.company_id, t.full_name, t.designation, t.phone, t.phone_key, t.alt_phone, t.email, t.email_key, t.city,
+         t.source, t.campaign, t.segment, array(select jsonb_array_elements_text(t.tags::jsonb)), t.notes, $16, $17
+       from unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[],
+         $10::text[], $11::text[], $12::text[], $13::text[], $14::text[], $15::int[])
+         as t(company_id, full_name, designation, phone, phone_key, alt_phone, email, email_key, city, source, campaign, segment, tags, notes, ord)
+       order by t.ord
+       on conflict (phone_key) where phone_key is not null do nothing`,
+      [
+        col((r) => (r.company?.trim() ? companyIds.get(keyOf(r.company.trim())) ?? null : null)),
+        col((r) => r.full_name), col((r) => r.designation ?? null), col((r) => r.phone ?? null), col((r) => r.phone_key),
+        col((r) => r.alt_phone ?? null), col((r) => r.email ?? null), col((r) => r.email_key), col((r) => r.city ?? null),
+        col((r) => r.source ?? req.source ?? "Import"), col((r) => r.campaign ?? req.campaign ?? null),
+        col((r) => r.segment ?? req.segment ?? null), col((r) => JSON.stringify(r.tags ?? [])), col((r) => r.notes ?? null),
+        col((r) => r.row), batch.id, user.id,
+      ],
+    );
     await audit({ id: user.id, label: user.full_name }, "contacts.import", "import_batch", batch.id, {
       file: req.fileName, created: fresh.length, duplicates: duplicateCount, invalid: invalidCount,
     }, q);
