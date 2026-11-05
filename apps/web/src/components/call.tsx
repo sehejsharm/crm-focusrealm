@@ -185,7 +185,17 @@ function CallDock({ call, target, mode, minimised, setMinimised, onEnd, onCancel
               {live && <span className="ml-2 font-mono tabular-nums text-white/80">{duration(secs)}</span>}
             </p>
             {mode === "phone_link" && call.status === "initiated" && (
-              <p className="mt-1 max-w-xs text-xs text-white/60">Open <b>Phone Link</b> on your phone and tap the number. Recording is attached after the call.</p>
+              <div className="mt-1 max-w-xs space-y-1.5 text-xs text-white/70">
+                <p>
+                  On your phone, open <b className="text-white">{window.location.host}/phone</b> and sign in with the same login.
+                  The number pops up there: tap it to dial on your SIM.
+                </p>
+                {target.phone_key && (
+                  <a href={`tel:+${target.phone_key}`} className="inline-block rounded-lg bg-white/15 px-2.5 py-1 font-semibold text-white hover:bg-white/25">
+                    Or dial from this device
+                  </a>
+                )}
+              </div>
             )}
             {mode === "demo" && <p className="mt-1 text-[11px] text-white/50">Demo mode — no real call is placed</p>}
           </motion.div>
@@ -411,7 +421,7 @@ export function CallButton({ contact, size = "md", className, label = "Call" }: 
       className={cn("shadow-[0_10px_24px_-10px_rgba(16,185,129,0.7)]", className)}
       disabled={disabled || Boolean(active)}
       loading={busy}
-      title={contact.do_not_contact ? "Do not contact" : undefined}
+      title={contact.do_not_contact ? "Marked do-not-contact" : !contact.phone_key ? "No phone number. Open the prospect and click Edit to add one." : undefined}
       icon={<Phone className="size-4" />}
       onClick={async (e) => {
         e.stopPropagation();

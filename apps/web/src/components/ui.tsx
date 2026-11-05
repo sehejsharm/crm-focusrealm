@@ -156,6 +156,8 @@ export function Badge({ tone = "neutral", dot, children, className, pulse }: { t
 
 // ------------------------------------------------------------------ Inputs
 
+/** True when the caller gives its own width (so it isn't overridden by w-full). */
+const widthSet = (c?: string) => !!c && /(^|\s)(w-|min-w-|max-w-|flex-1)/.test(c);
 const FIELD = "w-full rounded-xl border border-line-strong bg-surface px-3.5 text-sm text-fg placeholder:text-subtle shadow-xs outline-none transition focus:border-brand-500 focus:ring-focus disabled:opacity-60";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { icon?: ReactNode }>(function Input({ className, icon, ...rest }, ref) {
@@ -174,7 +176,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, children, ...rest }, ref) {
   return (
-    <select ref={ref} className={cn(FIELD, "h-10 appearance-none bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-9", className)}
+    <select ref={ref} className={cn(widthSet(className) ? FIELD.replace("w-full ", "") : FIELD, "h-10 appearance-none bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-9", className)}
       style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238492a7' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")" }}
       {...rest}
     >

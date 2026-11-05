@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft, Ban, Bot, Building2, CalendarClock, CalendarPlus, Check, CheckCircle2, Copy, Handshake, History, Mail, MapPin,
-  MessageSquare, Phone, PhoneCall, Send, Shuffle, Sparkles, Swords, Trophy, UserRound, XCircle,
+  MessageSquare, Pencil, Phone, PhoneCall, Send, Shuffle, Sparkles, Swords, Trophy, UserRound, XCircle,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -42,7 +42,7 @@ export default function ContactDetail() {
   const toast = useToast();
   const base = `/${user?.portal}`;
   const [note, setNote] = useState("");
-  const [modal, setModal] = useState<null | "followup" | "status" | "handoff" | "reassign" | "meeting" | "close">(null);
+  const [modal, setModal] = useState<null | "followup" | "status" | "handoff" | "reassign" | "meeting" | "close" | "edit">(null);
 
   const q = useQuery({ queryKey: ["contact", id], queryFn: () => api.get<any>(`/contacts/${id}`) });
   const refresh = () => {
@@ -113,10 +113,15 @@ export default function ContactDetail() {
             </div>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row lg:flex-col lg:items-end">
               <div className="flex items-center gap-2 lg:justify-end">
-                {canWork && !["legion"].includes(user?.role ?? "") && <CallButton size="lg" contact={c} label="Call now" className="min-w-44" />}
+                {canWork && !["legion"].includes(user?.role ?? "") && (
+                  c.phone_key || c.do_not_contact
+                    ? <CallButton size="lg" contact={c} label="Call now" className="min-w-44" />
+                    : <Button size="lg" variant="success" icon={<Phone className="size-4" />} className="min-w-44" onClick={() => setModal("edit")}>Add number to call</Button>
+                )}
                 {canWork && <WhatsAppButton contact={c} size={user?.role === "legion" ? "md" : "sm"} />}
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
+                {canWork && <Button size="sm" icon={<Pencil className="size-4" />} onClick={() => setModal("edit")}>Edit</Button>}
                 {canWork && <Button size="sm" icon={<CalendarClock className="size-4" />} onClick={() => setModal("followup")}>Follow-up</Button>}
                 {canWork && <Button size="sm" icon={<History className="size-4" />} onClick={() => setModal("status")}>Status</Button>}
                 {canWork && ["qualified", "qualification_review", "returned"].includes(c.status) && !pendingHandoff && user?.role !== "legion" && (
@@ -129,7 +134,7 @@ export default function ContactDetail() {
                     value=""
                     disabled={moveStage.isPending}
                     onChange={(e) => e.target.value && moveStage.mutate(e.target.value)}
-                    className="h-9 w-auto text-sm"
+                    className="h-9 w-40 text-sm"
                   >
                     <option value="">Move to…</option>
                     {STAGES.filter((s) => s.key !== c.stage).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -317,6 +322,7 @@ export default function ContactDetail() {
         </div>
       </div>
 
+      <EditContactModal open={modal === "edit"} onClose={() => setModal(null)} contact={c} onDone={refresh} />
       <FollowUpModal open={modal === "followup"} onClose={() => setModal(null)} contactId={c.id} name={c.full_name} onDone={refresh} />
       <StatusModal open={modal === "status"} onClose={() => setModal(null)} contact={c} onDone={refresh} />
       <HandoffModal open={modal === "handoff"} onClose={() => setModal(null)} contact={c} onDone={refresh} />
@@ -455,3 +461,54 @@ function CloseModal({ open, onClose, contact, onDone }: { open: boolean; onClose
   );
 }
 
+
+/** Fix a prospect's details: most often a missing or wrong phone number. */
+function EditContactModal({ open, onClose, contact, onDone }: { open: boolean; onClose: () => void; contact: Contact; onDone: () => void }) {
+  const toast = useToast();
+  const init = () => ({
+    full_name: contact.full_name ?? "",
+    phone: contact.phone ?? "",
+    email: contact.email ?? "",
+    company: contact.company_name ?? "",
+    designation: contact.designation ?? "",
+    city: contact.city ?? "",
+  });
+  const [f, setF] = useState(init);
+  const [wasOpen, setWasOpen] = useState(false);
+  if (open && !wasOpen) { setWasOpen(true); setF(init()); }
+  if (!open && wasOpen) setWasOpen(false);
+  const set = (k: keyof ReturnType<typeof init>) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const save = useMutation({
+    mutationFn: () => {
+      const body: Record<string, unknown> = {
+        full_name: f.full_name.trim(),
+        email: f.email.trim() || null,
+        company: f.company.trim() || null,
+        designation: f.designation.trim() || null,
+        city: f.city.trim() || null,
+      };
+      if (f.phone.trim() && f.phone.trim() !== (contact.phone ?? "")) body.phone = f.phone.trim();
+      return api.patch(`/contacts/${contact.id}`, body);
+    },
+    onSuccess: () => { toast({ kind: "success", title: "Details saved" }); onDone(); onClose(); },
+    onError: (e) => toast({ kind: "error", title: "Couldn't save", body: (e as Error).message }),
+  });
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Edit details"
+      icon={<Pencil className="size-5" />}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" loading={save.isPending} disabled={!f.full_name.trim()} onClick={() => save.mutate()}>Save</Button></>}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name *"><Input value={f.full_name} onChange={set("full_name")} /></Field>
+        <Field label="Phone" hint={contact.phone_key ? undefined : "Add a number to be able to call."}><Input value={f.phone} onChange={set("phone")} placeholder="+91 98765 43210" autoFocus={!contact.phone_key} /></Field>
+        <Field label="Email"><Input value={f.email} onChange={set("email")} type="email" /></Field>
+        <Field label="Company"><Input value={f.company} onChange={set("company")} /></Field>
+        <Field label="Designation"><Input value={f.designation} onChange={set("designation")} /></Field>
+        <Field label="City"><Input value={f.city} onChange={set("city")} /></Field>
+      </div>
+    </Modal>
+  );
+}

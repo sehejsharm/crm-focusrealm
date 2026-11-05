@@ -180,6 +180,25 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * Layout guards against sideways scrolling. Grid cells default to
+ * "min-width: auto", so one long word (a pasted link, an email) stretches the
+ * whole page wider than the screen. Letting cells shrink makes text truncate
+ * or wrap inside its card instead, and very long words break.
+ */
+.grid > * {
+  min-width: 0;
+}
+main {
+  overflow-wrap: break-word;
+}
+main table,
+main pre,
+main code,
+.whitespace-nowrap {
+  overflow-wrap: normal;
+}
+
 ::selection {
   background: rgba(47, 134, 240, 0.25);
 }
