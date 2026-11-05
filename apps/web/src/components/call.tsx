@@ -47,6 +47,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [wrapUp, setWrapUp] = useState<Call | null>(null);
   const [minimised, setMinimised] = useState(false);
   useFastLive("call", Boolean(active));
+  // The "call ended" request, so logging the outcome waits for it to land first.
+  const endingRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const start = async (contact: CallTarget) => {
     if (active) {
@@ -75,18 +77,25 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setActive((c) => (c && c.id === d.id && d.status ? { ...c, status: d.status, duration_sec: d.duration_sec ?? c.duration_sec } : c));
   });
 
-  const end = async () => {
+  // One press ends the call: the card closes straight away and the server is
+  // told in the background (it can take a few seconds on a cold start).
+  const end = () => {
     if (!active) return;
-    const r = await api.post<{ call: Call }>(`/calls/${active.id}/status`, { status: "completed" }).catch(() => null);
-    setWrapUp(r?.call ?? active);
+    const call = active;
     setActive(null);
+    setWrapUp(call);
+    endingRef.current = api
+      .post<{ call: Call }>(`/calls/${call.id}/status`, { status: "completed" }, { signal: AbortSignal.timeout(20_000) })
+      .then((r) => setWrapUp((w) => (w && w.id === call.id ? { ...w, ...r.call } : w)))
+      .catch(() => {});
   };
 
-  const cancel = async () => {
+  const cancel = () => {
     if (!active) return;
-    await api.post(`/calls/${active.id}/status`, { status: "cancelled" }).catch(() => {});
+    const call = active;
     setActive(null);
-    qc.invalidateQueries({ queryKey: ["dash"] });
+    api.post(`/calls/${call.id}/status`, { status: "cancelled" }).catch(() => {})
+      .finally(() => qc.invalidateQueries({ queryKey: ["dash"] }));
   };
 
   return (
@@ -97,7 +106,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           <CallDock key={active.id} call={active} target={target} mode={active.mode} minimised={minimised} setMinimised={setMinimised} onEnd={end} onCancel={cancel} telephony={meta?.telephonyMode} />
         )}
       </AnimatePresence>
-      <WrapUp call={wrapUp} target={target} onClose={() => setWrapUp(null)} />
+      <WrapUp call={wrapUp} target={target} ending={endingRef} onClose={() => setWrapUp(null)} />
     </CallCtx.Provider>
   );
 }
@@ -249,7 +258,7 @@ const QUICK = [
   { label: "Next week", at: () => { const d = new Date(); d.setDate(d.getDate() + 7); d.setHours(11, 0, 0, 0); return d; } },
 ];
 
-export function WrapUp({ call, target, onClose }: { call: Call | null; target: CallTarget | null; onClose: () => void }) {
+export function WrapUp({ call, target, onClose, ending }: { call: Call | null; target: CallTarget | null; onClose: () => void; ending?: { current: Promise<unknown> } }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -276,6 +285,7 @@ export function WrapUp({ call, target, onClose }: { call: Call | null; target: C
 
   const save = useMutation({
     mutationFn: async () => {
+      await ending?.current; // the "call ended" request goes first
       const r = await api.post<{ call: Call }>(`/calls/${call!.id}/outcome`, {
         outcome,
         notes: notes || null,
