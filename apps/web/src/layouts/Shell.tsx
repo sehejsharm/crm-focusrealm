@@ -126,7 +126,7 @@ function Notifications() {
           )}
         </AnimatePresence>
       </button>
-      <Popover open={open} onClose={() => setOpen(false)} className="w-[min(92vw,380px)]">
+      <Popover open={open} onClose={() => setOpen(false)} className="w-[min(92vw,380px)] max-sm:fixed max-sm:inset-x-3 max-sm:top-[calc(env(safe-area-inset-top)+3.75rem)] max-sm:w-auto">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <p className="text-sm font-bold text-fg">Notifications</p>
           {unread > 0 && <button onClick={() => read.mutate()} className="text-xs font-semibold text-accent hover:underline">Mark all read</button>}
@@ -225,6 +225,78 @@ function SideNav({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
   );
 }
 
+/** The four places each role visits most, for the phone tab bar. */
+function tabsFor(role: Role, items: NavItem[]): NavItem[] {
+  const pick: Record<string, string[]> = {
+    founder: ["/founder", "/founder/pipeline", "/founder/database", "/founder/tasks"],
+    legion: ["/legion", "/legion/handoffs", "/legion/meetings", "/legion/pipeline"],
+    sales: ["/sales", "/sales/sprint", "/sales/prospects", "/sales/follow-ups"],
+  };
+  const short: Record<string, string> = {
+    "/founder": "Home", "/founder/database": "Prospects", "/founder/tasks": "Tasks",
+    "/legion": "Home", "/legion/handoffs": "Handoffs",
+    "/sales": "My Day", "/sales/sprint": "Sprint", "/sales/prospects": "Prospects", "/sales/follow-ups": "Follow-ups",
+  };
+  const want = pick[role === "founder" || role === "legion" ? role : "sales"];
+  return want.map((to) => items.find((i) => i.to === to)).filter((i): i is NavItem => Boolean(i)).map((i) => ({ ...i, label: short[i.to] ?? i.label }));
+}
+
+/** True while a text field is focused on a touch screen (the keyboard is up). */
+function useTyping() {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    const isField = (el: EventTarget | null) =>
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement ||
+      (el instanceof HTMLInputElement && !["checkbox", "radio", "range", "button", "submit", "file"].includes(el.type));
+    const on = (e: FocusEvent) => isField(e.target) && setTyping(true);
+    const off = () => setTimeout(() => setTyping(isField(document.activeElement)), 50);
+    document.addEventListener("focusin", on);
+    document.addEventListener("focusout", off);
+    return () => {
+      document.removeEventListener("focusin", on);
+      document.removeEventListener("focusout", off);
+    };
+  }, []);
+  return typing;
+}
+
+/** Phone tab bar: the main pages within thumb reach, plus More for the rest. */
+function TabBar({ items, onMore, hidden }: { items: NavItem[]; onMore: () => void; hidden: boolean }) {
+  return (
+    <nav
+      aria-label="Main"
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-16px_rgba(10,20,38,0.25)] backdrop-blur-xl transition-transform duration-200 lg:hidden",
+        hidden && "translate-y-full",
+      )}
+    >
+      <div className="mx-auto grid h-16 max-w-xl grid-cols-5">
+        {items.map((it) => (
+          <NavLink key={it.to} to={it.to} end={it.end} className="group relative flex flex-col items-center justify-center gap-1">
+            {({ isActive }) => (
+              <>
+                {isActive && <motion.span layoutId="tab-active" className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-brand-500" transition={{ type: "spring", stiffness: 500, damping: 38 }} />}
+                <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors", isActive ? "bg-accent-soft text-accent" : "text-muted group-active:bg-surface-hover")}>
+                  <it.icon className="size-[19px]" />
+                </span>
+                <span className={cn("max-w-full truncate px-0.5 text-[10.5px] font-semibold", isActive ? "text-accent" : "text-muted")}>{it.label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+        <button type="button" onClick={onMore} className="group flex flex-col items-center justify-center gap-1" aria-label="More pages">
+          <span className="grid h-7 w-12 place-items-center rounded-full text-muted group-active:bg-surface-hover">
+            <Menu className="size-[19px]" />
+          </span>
+          <span className="text-[10.5px] font-semibold text-muted">More</span>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export function Shell() {
   const { user } = useAuth();
   const location = useLocation();
@@ -233,6 +305,8 @@ export function Shell() {
   const live = useLiveStatus();
   const outlet = useOutlet();
   const nav = navFor(user!.role);
+  const tabs = tabsFor(user!.role, nav.items);
+  const typing = useTyping();
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
@@ -280,8 +354,8 @@ export function Shell() {
         {mobile && (
           <motion.div className="fixed inset-0 z-50 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="absolute inset-0 bg-[rgba(10,20,38,0.4)] backdrop-blur-sm" onClick={() => setMobile(false)} />
-            <motion.aside initial={{ x: -290 }} animate={{ x: 0 }} exit={{ x: -290 }} transition={{ type: "spring", stiffness: 380, damping: 36 }} className="absolute inset-y-0 left-0 w-[276px] border-r border-line bg-surface">
-              <button onClick={() => setMobile(false)} className="absolute top-5 right-3 rounded-lg p-1.5 text-muted hover:bg-surface-hover" aria-label="Close menu">
+            <motion.aside initial={{ x: -290 }} animate={{ x: 0 }} exit={{ x: -290 }} transition={{ type: "spring", stiffness: 380, damping: 36 }} className="absolute inset-y-0 left-0 w-[min(300px,86vw)] overscroll-contain border-r border-line bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+              <button onClick={() => setMobile(false)} className="absolute top-[calc(env(safe-area-inset-top)+1rem)] right-3 grid size-10 place-items-center rounded-xl text-muted hover:bg-surface-hover" aria-label="Close menu">
                 <X className="size-5" />
               </button>
               {sidebar}
@@ -291,18 +365,18 @@ export function Shell() {
       </AnimatePresence>
 
       <div className="relative lg:pl-[264px]">
-        <header className="glass sticky top-0 z-30 border-b border-line">
+        <header className="glass sticky top-0 z-30 border-b border-line pt-[env(safe-area-inset-top)]">
           <Beam />
           <div className="flex h-15 items-center gap-2 px-4 sm:px-6">
-            <button onClick={() => setMobile(true)} className="grid size-9 place-items-center rounded-xl text-muted hover:bg-surface-hover lg:hidden" aria-label="Open menu">
+            <button onClick={() => setMobile(true)} className="grid size-10 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-hover lg:hidden" aria-label="Open menu">
               <Menu className="size-5" />
             </button>
             <button
               onClick={() => setCmd(true)}
-              className="group flex h-9.5 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface/80 px-3 text-left text-sm text-subtle shadow-xs transition hover:border-line-strong sm:max-w-md"
+              className="group flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface/80 px-3 text-left text-sm text-subtle shadow-xs transition hover:border-line-strong sm:max-w-md"
             >
               <Search className="size-4 shrink-0 transition-transform group-hover:scale-110 group-hover:text-accent" />
-              <span className="truncate">Search prospects, calls, people…</span>
+              <span className="truncate"><span className="sm:hidden">Search…</span><span className="hidden sm:inline">Search prospects, calls, people…</span></span>
               <span className="ml-auto hidden sm:block"><Kbd>⌘ K</Kbd></span>
             </button>
             <div className="ml-auto flex items-center gap-1">
@@ -320,7 +394,7 @@ export function Shell() {
           </div>
         </header>
 
-        <main className="relative mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="relative mx-auto w-full max-w-[1400px] px-4 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:px-8 lg:py-8">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -335,6 +409,7 @@ export function Shell() {
         </main>
       </div>
 
+      <TabBar items={tabs} onMore={() => setMobile(true)} hidden={typing || mobile} />
       <CommandPalette open={cmd} onClose={() => setCmd(false)} nav={nav.items} />
     </div>
   );

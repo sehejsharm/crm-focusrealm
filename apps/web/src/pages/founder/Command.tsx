@@ -79,17 +79,17 @@ export default function Command() {
               <span className="font-mono tabular-nums">{new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Kolkata" }).format(now)}</span> IST
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <TargetRing value={callsToday} target={target} />
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
               {[
                 ["On a call", onCall, <Phone key="i" className="size-4" />],
                 ["Calls today", callsToday, <PhoneCall key="i" className="size-4" />],
                 ["Meetings today", team.data?.totals.meetings ?? 0, <Rocket key="i" className="size-4" />],
               ].map(([l, v, icon]) => (
-                <div key={l as string} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
-                  <p className="flex items-center gap-1.5 text-[11px] whitespace-nowrap text-white/70">{icon}{l}</p>
-                  <p className="mt-1 text-3xl font-bold tabular-nums"><Counter value={v as number} /></p>
+                <div key={l as string} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3">
+                  <p className="flex items-center gap-1.5 text-[11px] leading-tight text-white/70 sm:whitespace-nowrap">{icon}{l}</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl"><Counter value={v as number} /></p>
                 </div>
               ))}
             </div>
@@ -157,9 +157,9 @@ export default function Command() {
                     <span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-xs font-black", i === 0 ? "bg-amber-400 text-white" : i === 1 ? "bg-slate-300 text-slate-700" : i === 2 ? "bg-orange-300 text-orange-900" : "bg-sunken text-muted")}>{i + 1}</span>
                     <Avatar name={x.full_name} hue={x.avatar_hue} size={32} />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
                         <p className="truncate text-sm font-semibold text-fg">{x.full_name}</p>
-                        <p className="shrink-0 text-xs text-muted tabular-nums"><b className="text-fg">{x.qualified_plus}</b> qualified · {pct(x.connected, x.calls)}% connect</p>
+                        <p className="text-xs text-muted tabular-nums sm:shrink-0"><b className="text-fg">{x.qualified_plus}</b> qualified · {pct(x.connected, x.calls)}% connect</p>
                       </div>
                       <div className="mt-1 flex items-center gap-2">
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">

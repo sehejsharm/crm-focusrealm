@@ -19,7 +19,7 @@ const BTN: Record<BtnVariant, string> = {
   soft: "bg-accent-soft text-accent-soft-fg hover:brightness-[0.97] dark:hover:brightness-125",
   success: "bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-sm ring-1 ring-inset ring-white/15",
 };
-const BTN_SIZE = { xs: "h-7 px-2.5 text-xs gap-1.5 rounded-lg", sm: "h-8.5 px-3 text-[13px] gap-1.5 rounded-xl", md: "h-10 px-4 text-sm gap-2 rounded-xl", lg: "h-12 px-5 text-[15px] gap-2.5 rounded-2xl" };
+const BTN_SIZE = { xs: "h-7 px-2.5 text-xs gap-1.5 rounded-lg pointer-coarse:h-9 pointer-coarse:px-3", sm: "h-8.5 px-3 text-[13px] gap-1.5 rounded-xl pointer-coarse:h-10", md: "h-10 px-4 text-sm gap-2 rounded-xl", lg: "h-12 px-5 text-[15px] gap-2.5 rounded-2xl" };
 
 export interface ButtonProps extends Omit<HTMLMotionProps<"button">, "children"> {
   variant?: BtnVariant;
@@ -62,7 +62,7 @@ export function IconButton({ className, label, children, ...rest }: ButtonHTMLAt
     <button
       aria-label={label}
       title={label}
-      className={cn("relative grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-hover hover:text-fg focus-visible:ring-focus active:scale-95", className)}
+      className={cn("relative grid size-9 place-items-center rounded-xl pointer-coarse:size-10 text-muted transition hover:bg-surface-hover hover:text-fg focus-visible:ring-focus active:scale-95", className)}
       {...rest}
     >
       {children}
@@ -239,7 +239,7 @@ export function Tabs<T extends string>({ value, onChange, items, className, size
           <button
             key={it.value}
             onClick={() => onChange(it.value)}
-            className={cn("relative rounded-lg font-semibold whitespace-nowrap transition-colors", size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-1.5 text-[13px]", value === it.value ? "text-fg" : "text-muted hover:text-fg")}
+            className={cn("relative rounded-lg font-semibold whitespace-nowrap transition-colors", size === "sm" ? "px-2.5 py-1 text-xs pointer-coarse:py-1.5" : "px-3.5 py-1.5 text-[13px] pointer-coarse:py-2", value === it.value ? "text-fg" : "text-muted hover:text-fg")}
           >
             {value === it.value && (
               <motion.span layoutId={`tab-${id}`} className="absolute inset-0 rounded-lg bg-surface shadow-sm ring-1 ring-line" transition={{ type: "spring", stiffness: 500, damping: 36 }} />
@@ -293,6 +293,16 @@ export function Empty({ icon, title, body, action, className }: { icon: ReactNod
 
 // ------------------------------------------------------------ Modal/Drawer
 
+/** Stops the page behind a sheet or drawer from scrolling (iOS scrolls it otherwise). */
+export function useScrollLock(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; };
+  }, [locked]);
+}
+
 export function Modal({ open, onClose, title, subtitle, children, footer, size = "md", icon }: {
   open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; size?: "sm" | "md" | "lg" | "xl"; icon?: ReactNode;
 }) {
@@ -302,6 +312,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
   }, [open, onClose]);
+  useScrollLock(open);
   const width = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" }[size];
   return createPortal(
     <AnimatePresence>
@@ -318,7 +329,8 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
             className={cn("relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-line bg-surface shadow-lg sm:rounded-3xl", width)}
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-brand-500/10 to-transparent" />
-            <div className="relative flex items-start gap-3 px-6 pt-5 pb-3">
+            <span className="relative mx-auto mt-2.5 block h-1.5 w-10 shrink-0 rounded-full bg-line-strong sm:hidden" aria-hidden />
+            <div className="relative flex items-start gap-3 px-5 pt-3 pb-3 sm:px-6 sm:pt-5">
               {icon && <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 text-white shadow-brand">{icon}</span>}
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-bold tracking-tight text-fg">{title}</h2>
@@ -328,8 +340,12 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
                 <X className="size-4.5" />
               </IconButton>
             </div>
-            <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-5">{children}</div>
-            {footer && <div className="relative flex flex-wrap items-center justify-end gap-2 border-t border-line bg-sunken/60 px-6 py-3.5">{footer}</div>}
+            <div className={cn("relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 sm:px-6", footer ? "pb-5" : "pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5")}>{children}</div>
+            {footer && (
+              <div className="relative flex flex-wrap items-center justify-end gap-2 border-t border-line bg-sunken/60 px-5 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] max-sm:[&>*]:flex-1 sm:px-6 sm:pb-3.5">
+                {footer}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
@@ -339,6 +355,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
 }
 
 export function Drawer({ open, onClose, title, children, width = 480 }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; width?: number }) {
+  useScrollLock(open);
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -352,13 +369,13 @@ export function Drawer({ open, onClose, title, children, width = 480 }: { open: 
             className="absolute top-0 right-0 flex h-full w-full flex-col border-l border-line bg-surface shadow-lg"
             style={{ maxWidth: width }}
           >
-            <div className="flex items-center justify-between border-b border-line px-5 py-4">
+            <div className="flex items-center justify-between border-b border-line px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
               <h2 className="text-base font-bold text-fg">{title}</h2>
               <IconButton label="Close" onClick={onClose}>
                 <X className="size-4.5" />
               </IconButton>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">{children}</div>
           </motion.aside>
         </motion.div>
       )}
@@ -370,7 +387,7 @@ export function Drawer({ open, onClose, title, children, width = 480 }: { open: 
 // ------------------------------------------------------------------- Misc
 
 export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded-md border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-muted shadow-xs">{children}</kbd>;
+  return <kbd className="pointer-coarse:hidden rounded-md border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-muted shadow-xs">{children}</kbd>;
 }
 
 export function Progress({ value, max = 100, tone = "brand", className, height = 6 }: { value: number; max?: number; tone?: Tone; className?: string; height?: number }) {

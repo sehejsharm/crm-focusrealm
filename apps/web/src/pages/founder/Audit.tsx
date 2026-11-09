@@ -23,11 +23,11 @@ export default function Audit() {
         {log.isLoading ? <Skeleton className="m-4 h-64" /> : !log.data?.entries.length ? <Empty icon={<ScrollText className="size-6" />} title="Nothing logged yet" /> : (
           <div className="divide-y divide-line">
             {log.data.entries.map((e, i) => (
-              <motion.div key={e.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 20) * 0.015 }} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+              <motion.div key={e.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 20) * 0.015 }} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-sm sm:px-5">
                 <Avatar name={e.actor_name ?? e.actor_label ?? "System"} size={30} />
-                <span className="w-40 shrink-0 font-semibold text-fg">{e.actor_name ?? e.actor_label ?? "System"}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold text-fg sm:w-40 sm:flex-none sm:shrink-0">{e.actor_name ?? e.actor_label ?? "System"}</span>
                 <Badge tone={e.action.startsWith("hr.") ? "brand" : e.action.includes("reassign") || e.action.includes("reset") ? "warning" : "neutral"}>{e.action}</Badge>
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">{e.entity}{e.entity_id ? `:${String(e.entity_id).slice(0, 8)}` : ""} {Object.keys(e.meta ?? {}).length ? JSON.stringify(e.meta).slice(0, 120) : ""}</span>
+                <span className="min-w-0 truncate font-mono text-xs text-muted max-sm:order-last max-sm:line-clamp-2 max-sm:basis-full max-sm:break-all max-sm:whitespace-normal sm:flex-1">{e.entity}{e.entity_id ? `:${String(e.entity_id).slice(0, 8)}` : ""} {Object.keys(e.meta ?? {}).length ? JSON.stringify(e.meta).slice(0, 120) : ""}</span>
                 <span className="text-xs text-subtle">{fmtDateTime(e.created_at)}</span>
               </motion.div>
             ))}

@@ -28,7 +28,7 @@ export default function Meetings() {
   }
   return (
     <div>
-      <PageHeader eyebrow="Legion" title="Legion meetings" subtitle="Meet 1 and Meet 2 for every handed-off prospect." actions={<><Tabs value={view} onChange={setView} items={[{ value: "upcoming", label: "Upcoming" }, { value: "past", label: "Past" }]} />{user?.role === "legion" && <Tabs value={mine ? "mine" : "all"} onChange={(v) => setMine(v === "mine")} items={[{ value: "mine", label: "Mine" }, { value: "all", label: "Team" }]} />}</>} />
+      <PageHeader eyebrow="Legion" title="Legion meetings" subtitle="Meet 1, 2 and 3 for every handed-off prospect." actions={<><Tabs value={view} onChange={setView} items={[{ value: "upcoming", label: "Upcoming" }, { value: "past", label: "Past" }]} />{user?.role === "legion" && <Tabs value={mine ? "mine" : "all"} onChange={(v) => setMine(v === "mine")} items={[{ value: "mine", label: "Mine" }, { value: "all", label: "Team" }]} />}</>} />
       {q.isLoading ? <Skeleton className="h-64" /> : groups.size === 0 ? <Card><Empty icon={<CalendarCheck className="size-6" />} title="No meetings" body="Book Legion Meet 1 from an accepted handoff." /></Card> : (
         <div className="space-y-6">
           {[...groups.entries()].map(([day, ms], gi) => (
@@ -61,19 +61,20 @@ function MeetingRow({ m }: { m: any }) {
   const base = `/${user?.portal}`;
   return (
     <Card className="flex flex-wrap items-center gap-4 p-4" hover>
-      <div className="w-16 text-center">
-        <p className="text-lg font-bold text-fg">{fmtTime(m.scheduled_at)}</p>
+      <div className="w-16 shrink-0 text-center">
+        <p className="text-lg leading-tight font-bold whitespace-nowrap text-fg max-sm:text-base">{fmtTime(m.scheduled_at)}</p>
         <p className="text-[11px] text-muted">{m.duration_min} min</p>
       </div>
-      <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 text-xs font-black text-white shadow-brand">{m.stage === "legion_meet_1" ? "M1" : m.stage === "legion_meet_2" ? "M2" : "M3"}</span>
+      <span className="hidden size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br sm:grid from-brand-500 to-brand-800 text-xs font-black text-white shadow-brand">{m.stage === "legion_meet_1" ? "M1" : m.stage === "legion_meet_2" ? "M2" : "M3"}</span>
       <div className="min-w-0 flex-1">
+        <span className="mb-1 inline-flex sm:hidden"><Badge tone={m.status === "completed" ? "success" : m.status === "scheduled" ? "brand" : "neutral"}>{m.stage === "legion_meet_1" ? "Meet 1" : m.stage === "legion_meet_2" ? "Meet 2" : "Meet 3"} · {m.status.replace("_", " ")}</Badge></span>
         <Link to={`${base}/contacts/${m.contact_id}`} className="block truncate font-semibold text-fg hover:text-accent">{m.contact_name} <span className="font-normal text-muted">· {m.company_name}</span></Link>
         <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">{label(m.stage)} · {m.legion_name ?? "Legion"} · from {m.sales_name ?? "—"}{m.location && <span className="flex items-center gap-1"><MapPin className="size-3" />{m.location}</span>}</p>
         {m.outcome && <p className="mt-1 text-xs text-fg">{m.outcome}</p>}
       </div>
-      <Badge tone={m.status === "completed" ? "success" : m.status === "scheduled" ? "brand" : "neutral"}>{m.status.replace("_", " ")}</Badge>
+      <span className="hidden sm:inline-flex"><Badge tone={m.status === "completed" ? "success" : m.status === "scheduled" ? "brand" : "neutral"}>{m.status.replace("_", " ")}</Badge></span>
       {m.status === "scheduled" && (user?.role === "legion" || user?.role === "founder") && (
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 max-sm:w-full max-sm:[&>*:not(:last-child)]:flex-1">
           <Button size="sm" variant="success" icon={<CheckCircle2 className="size-4" />} onClick={() => setClosing("completed")}>Held</Button>
           <Button size="sm" icon={<UserX className="size-4" />} onClick={() => setClosing("no_show")}>No-show</Button>
           <Button size="sm" variant="ghost" icon={<CalendarX className="size-4" />} onClick={() => setClosing("cancelled")} />

@@ -138,7 +138,7 @@ function CallDock({ call, target, mode, minimised, setMinimised, onEnd, onCancel
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 30 }}
         onClick={() => setMinimised(false)}
-        className="fixed right-4 bottom-4 z-[90] flex items-center gap-3 rounded-full bg-gradient-to-r from-brand-600 to-brand-800 py-2 pr-5 pl-2 text-white shadow-brand"
+        className="above-tabbar fixed right-4 bottom-4 z-[90] flex items-center gap-3 rounded-full bg-gradient-to-r from-brand-600 to-brand-800 py-2 pr-5 pl-2 text-white shadow-brand"
       >
         <span className="relative grid size-10 place-items-center rounded-full bg-white/15">
           <PulseRings color="bg-white/25" />
@@ -158,7 +158,7 @@ function CallDock({ call, target, mode, minimised, setMinimised, onEnd, onCancel
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 60, scale: 0.94 }}
       transition={{ type: "spring", stiffness: 300, damping: 28 }}
-      className="fixed inset-x-3 bottom-3 z-[90] mx-auto max-w-md overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-[#0b2a66] via-brand-800 to-brand-950 text-white shadow-[0_30px_80px_-20px_rgba(10,30,80,0.7)] sm:right-6 sm:bottom-6 sm:left-auto sm:mx-0 sm:w-[400px]"
+      className="above-tabbar fixed inset-x-3 bottom-3 z-[90] mx-auto max-h-[calc(100dvh-7rem)] max-w-md overflow-y-auto overscroll-contain rounded-[28px] border border-white/10 bg-gradient-to-br from-[#0b2a66] via-brand-800 to-brand-950 text-white shadow-[0_30px_80px_-20px_rgba(10,30,80,0.7)] sm:right-6 sm:bottom-6 sm:left-auto sm:mx-0 sm:w-[400px]"
     >
       <div className="pointer-events-none absolute -top-24 -right-20 size-64 rounded-full bg-brand-400/30 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-sky/20 blur-3xl" />

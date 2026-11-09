@@ -36,8 +36,34 @@ export default function Team() {
       <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
         <Card>
           <CardHeader title="Leaderboard" subtitle="Ranked by calls today" icon={<Trophy className="size-4" />} />
-          <div className="overflow-x-auto px-2 pb-3">
-            {q.isLoading && <Skeleton className="m-3 h-64" />}
+          {q.isLoading && <Skeleton className="m-3 h-64" />}
+          {/* Phones: one card per person instead of a seven-column table. */}
+          <div className="space-y-2 px-3 pb-4 sm:hidden">
+            {d?.people.map((p: any, i: number) => (
+              <div key={p.id} className="rounded-2xl border border-line p-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-5 shrink-0 text-center text-sm">{["🥇", "🥈", "🥉"][i] ?? <span className="text-subtle">{i + 1}</span>}</span>
+                  <Avatar name={p.full_name} hue={p.avatar_hue} size={34} online={online(p.last_active_at)} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-fg">{p.full_name}</p>
+                    <p className="truncate text-[11px] text-muted">{p.last_call_at ? `last call ${ago(p.last_call_at)}` : "no calls yet"} · {p.active_prospects} active</p>
+                  </div>
+                  {p.report_id && <Link to={`${base}/reports/${p.report_id}`} className="shrink-0"><Grade grade={p.report_grade} size={30} /></Link>}
+                </div>
+                <div className="mt-2.5">
+                  <div className="mb-1 flex justify-between text-xs"><span className="text-muted">Calls vs target</span><span><b className="text-fg">{p.calls}</b><span className="text-muted"> / {p.daily_call_target}</span></span></div>
+                  <Progress value={p.calls} max={p.daily_call_target} tone={p.calls >= p.daily_call_target ? "success" : "brand"} />
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
+                  <span><b className="text-fg">{p.connected}</b> connected · {minutes(p.talk_sec)}</span>
+                  <span><b className="text-fg">{p.meetings || 0}</b> meetings</span>
+                  {p.avg_score != null && <span className="flex items-center gap-1">AI <Badge tone={scoreTone(p.avg_score)}>{p.avg_score}</Badge></span>}
+                  {p.overdue ? <Badge tone="danger">{p.overdue} overdue</Badge> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto px-2 pb-3 sm:block">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="text-xs text-muted"><tr><th className="px-3 py-2 font-semibold">Salesperson</th><th className="px-3 py-2 font-semibold">Calls vs target</th><th className="px-3 py-2 text-center font-semibold">Connected</th><th className="px-3 py-2 text-center font-semibold">Meetings</th><th className="px-3 py-2 text-center font-semibold">AI score</th><th className="px-3 py-2 text-center font-semibold">Overdue</th><th className="px-3 py-2 text-center font-semibold">Report</th></tr></thead>
               <tbody>

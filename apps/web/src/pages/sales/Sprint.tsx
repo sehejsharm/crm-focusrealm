@@ -177,19 +177,20 @@ function ProspectCard({ item: x, onCall, onSkip, busy }: { item: Item; onCall: (
     <Card className="p-0" spotlight={false}>
       <div className="relative rounded-t-[inherit] bg-gradient-to-br from-brand-50 via-surface to-surface p-6 sm:p-8 dark:from-brand-950/50">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-          <Avatar name={x.full_name} size={72} />
+          <span className="hidden sm:block"><Avatar name={x.full_name} size={72} /></span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={R.tone}><R.icon className="mr-1 inline size-3" />{x.reason === "follow_up" && x.due_at ? `${overdue ? "Overdue" : "Due"} · ${fmtTime(x.due_at)}` : x.reason === "quiet" && x.last_contacted_at ? `Quiet since ${ago(x.last_contacted_at)}` : R.label}</Badge>
               {x.temperature != null && <Badge tone={x.temperature >= 70 ? "danger" : x.temperature >= 40 ? "warning" : "neutral"}><Flame className="mr-1 inline size-3" />{x.temperature}°</Badge>}
               {x.call_count > 0 && <Badge tone="neutral">{x.call_count} call{x.call_count === 1 ? "" : "s"} so far</Badge>}
             </div>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-fg">{x.full_name}</h2>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-fg sm:text-3xl">{x.full_name}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
               {(x.designation || x.company_name) && <span className="flex items-center gap-1.5"><Building2 className="size-4" />{x.designation ? `${x.designation} at ` : ""}<b className="text-fg">{x.company_name ?? "—"}</b></span>}
               {x.city && <span className="flex items-center gap-1.5"><MapPin className="size-4" />{x.city}</span>}
               <span className="font-mono text-fg">{phone(x.phone_key)}</span>
             </p>
+            <Link to={`/sales/contacts/${x.id}`} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-accent sm:hidden">Full profile <ArrowRight className="size-4" /></Link>
           </div>
         </div>
 
@@ -205,13 +206,14 @@ function ProspectCard({ item: x, onCall, onSkip, busy }: { item: Item; onCall: (
           {x.reason === "fresh" && !x.task_title && <Context icon={<Sparkles className="size-4" />} title="First call">Open with permission, ask about their current process before pitching, and aim to book a short Legion meeting.</Context>}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3 rounded-b-[inherit] border-t border-line bg-surface px-6 py-4 sm:px-8">
-        <Button size="lg" variant="success" icon={<Phone className="size-5" />} className="min-w-48 shadow-[0_10px_24px_-10px_rgba(16,185,129,0.7)]" disabled={busy} onClick={onCall}>
+      <div className="flex flex-wrap items-center gap-3 rounded-b-[inherit] border-t border-line bg-surface px-4 py-3 max-lg:sticky max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-lg:z-20 max-lg:shadow-[0_-10px_24px_-14px_rgba(10,20,38,0.35)] sm:px-8 sm:py-4">
+        <Button size="lg" variant="success" icon={<Phone className="size-5" />} className="shadow-[0_10px_24px_-10px_rgba(16,185,129,0.7)] max-sm:min-w-0 max-sm:flex-1 sm:min-w-48" disabled={busy} onClick={onCall}>
           {busy ? "On the call…" : "Call"} <Kbd>Space</Kbd>
         </Button>
-        <WhatsAppButton contact={x} />
+        <WhatsAppButton contact={x} size="sm" className="sm:hidden" />
+        <WhatsAppButton contact={x} className="hidden sm:block" />
         <Button variant="ghost" icon={<SkipForward className="size-4" />} disabled={busy} onClick={onSkip}>Skip <Kbd>S</Kbd></Button>
-        <Link to={`/sales/contacts/${x.id}`} target="_blank" className="ml-auto flex items-center gap-1 text-sm font-semibold text-accent hover:underline">Full profile <ArrowRight className="size-4" /></Link>
+        <Link to={`/sales/contacts/${x.id}`} target="_blank" className="ml-auto hidden items-center gap-1 text-sm font-semibold text-accent hover:underline sm:flex">Full profile <ArrowRight className="size-4" /></Link>
       </div>
     </Card>
   );

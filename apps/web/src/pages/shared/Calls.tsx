@@ -42,30 +42,30 @@ export default function Calls() {
         subtitle={`${(q.data?.total ?? 0).toLocaleString("en-IN")} calls · every one with a unique call ID`}
         actions={manager && <Button variant="ghost" icon={<Download className="size-4" />} onClick={() => window.location.assign(`/api/export/calls.csv${qs({ from: from ?? new Date(Date.now() - 30 * 86400_000).toISOString(), to })}`)}>Export CSV</Button>}
       />
-      <Card className="mb-4 flex flex-wrap gap-2 p-3" spotlight={false}>
-        <Select value={outcome} onChange={(e) => { setOutcome(e.target.value); setPage(1); }} className="w-auto min-w-40">
+      <Card className="mb-4 grid grid-cols-2 gap-2 p-3 sm:flex sm:flex-wrap" spotlight={false}>
+        <Select value={outcome} onChange={(e) => { setOutcome(e.target.value); setPage(1); }} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
           <option value="">All outcomes</option>
           {OUTCOMES.map((o) => <option key={o.key} value={o.key}>{o.emoji} {o.label}</option>)}
         </Select>
-        <Select value={analysis} onChange={(e) => { setAnalysis(e.target.value); setPage(1); }} className="w-auto min-w-40">
+        <Select value={analysis} onChange={(e) => { setAnalysis(e.target.value); setPage(1); }} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
           <option value="">Any analysis state</option>
           <option value="done">Analysed</option>
           <option value="needs_review">Needs human review</option>
           <option value="queued">Queued for end of day</option>
           <option value="none">Not analysed</option>
         </Select>
-        <Select value={recording} onChange={(e) => { setRecording(e.target.value); setPage(1); }} className="w-auto min-w-40">
+        <Select value={recording} onChange={(e) => { setRecording(e.target.value); setPage(1); }} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
           <option value="">Any recording</option>
           <option value="uploaded">Has a recording</option>
           <option value="missing">Connected, no recording</option>
         </Select>
         {user?.role !== "sales_rep" && (
-          <Select value={userId} onChange={(e) => { setUserId(e.target.value); setPage(1); }} className="w-auto min-w-40">
+          <Select value={userId} onChange={(e) => { setUserId(e.target.value); setPage(1); }} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
             <option value="">Everyone</option>
             {(people.data?.users ?? []).filter((u) => ["sales_rep", "sales_head"].includes(u.role)).map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
           </Select>
         )}
-        <input type="date" value={day} max={todayISO()} onChange={(e) => { setDay(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-line-strong bg-surface px-3 text-sm text-fg" />
+        <input type="date" value={day} max={todayISO()} onChange={(e) => { setDay(e.target.value); setPage(1); }} className="h-10 min-w-0 rounded-xl border border-line-strong bg-surface px-3 text-sm text-fg" />
         {(outcome || analysis || userId || day) && <Button variant="ghost" size="sm" className="h-10" onClick={() => { setOutcome(""); setAnalysis(""); setUserId(""); setDay(""); }}>Clear</Button>}
       </Card>
 
@@ -78,17 +78,21 @@ export default function Calls() {
           <div className="divide-y divide-line">
             {q.data.rows.map((k, i) => (
               <motion.div key={k.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 20) * 0.015 }}>
-                <Link to={`${base}/calls/${k.id}`} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-hover">
-                  <Avatar name={k.user_name} hue={k.user_hue} size={34} className="hidden sm:inline-grid" />
+                <Link to={`${base}/calls/${k.id}`} className="group flex items-start gap-3 px-4 py-3 transition hover:bg-surface-hover sm:items-center">
+                  <span className="hidden shrink-0 sm:block"><Avatar name={k.user_name} hue={k.user_hue} size={34} /></span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-fg group-hover:text-accent">{k.contact_name} <span className="font-normal text-muted">· {k.company_name ?? "—"}</span></p>
+                    <p className="truncate text-sm font-semibold text-fg group-hover:text-accent">{k.contact_name ?? "Unknown prospect"} <span className="font-normal text-muted">· {k.company_name ?? "—"}</span></p>
                     <p className="truncate text-xs text-muted"><span className="font-mono">{k.call_code}</span> · {k.user_name} · {fmtDateTime(k.started_at)}</p>
-                    {k.summary && <p className="mt-0.5 line-clamp-1 text-xs text-subtle">{k.summary}</p>}
+                    {k.summary && <p className="mt-0.5 line-clamp-2 text-xs text-subtle sm:line-clamp-1">{k.summary}</p>}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
+                      {k.outcome && <Badge tone={OUTCOME_TONE[k.outcome] ?? "neutral"}>{label(k.outcome)}</Badge>}
+                      {k.duration_sec ? <span className="font-mono text-[11px] text-muted">{duration(k.duration_sec)}</span> : null}
+                    </div>
                   </div>
                   <span className="hidden font-mono text-xs text-muted md:block">{duration(k.duration_sec)}</span>
-                  {k.outcome && <Badge tone={OUTCOME_TONE[k.outcome] ?? "neutral"}>{label(k.outcome)}</Badge>}
-                  <Badge tone={ANALYSIS_TONE[k.analysis_status] ?? "neutral"} className="hidden lg:inline-flex"><Bot className="size-3" />{k.analysis_status === "none" ? "—" : label(k.analysis_status)}</Badge>
-                  <span className="w-11 text-right">{k.score != null && <Badge tone={scoreTone(k.score)}>{k.score}</Badge>}</span>
+                  {k.outcome && <span className="hidden sm:inline-flex"><Badge tone={OUTCOME_TONE[k.outcome] ?? "neutral"}>{label(k.outcome)}</Badge></span>}
+                  <span className="hidden lg:inline-flex"><Badge tone={ANALYSIS_TONE[k.analysis_status] ?? "neutral"}><Bot className="size-3" />{k.analysis_status === "none" ? "—" : label(k.analysis_status)}</Badge></span>
+                  <span className="w-11 shrink-0 text-right">{k.score != null && <Badge tone={scoreTone(k.score)}>{k.score}</Badge>}</span>
                 </Link>
               </motion.div>
             ))}

@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { AlarmClock, CalendarClock, Check, ClipboardList, Flag, ListTodo, Send } from "lucide-react";
+import { AlarmClock, CalendarClock, Check, ClipboardList, Flag, ListTodo, Plus, Send } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CallButton } from "../../components/call";
 import { celebrate } from "../../components/motion";
 import { useToast } from "../../components/toast";
-import { Avatar, Badge, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Skeleton, Tabs, Textarea } from "../../components/ui";
+import { Avatar, Badge, Button, Card, CardHeader, Empty, Field, Input, Modal, PageHeader, Select, Skeleton, Tabs, Textarea } from "../../components/ui";
 import { api, qs } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { cn, fmtDate, fmtTime, localInput } from "../../lib/format";
@@ -34,6 +34,7 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
   const toast = useToast();
   const [status, setStatus] = useState<"open" | "overdue" | "done" | "missed">("open");
   const [assignee, setAssignee] = useState("");
+  const [assigning, setAssigning] = useState(false);
   const base = `/${user?.portal}`;
   const tasks = useQuery({
     queryKey: ["tasks", mode, status, assignee],
@@ -49,6 +50,19 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
       if (v.dueAt) toast({ kind: "info", title: "Rescheduled" });
     },
   });
+  // Who / priority / snooze: beside the task on wide screens, under it on phones.
+  const extras = (t: Task) => (
+    <>
+      {mode === "team" && t.assignee_name && <span className="flex items-center gap-1.5 text-xs text-muted"><Avatar name={t.assignee_name} hue={t.assignee_hue} size={22} />{t.assignee_name.split(" ")[0]}</span>}
+      {t.priority !== "normal" && <Badge tone={PRIORITY_TONE[t.priority]}><Flag className="size-3" />{t.priority}</Badge>}
+      {t.status === "open" && (
+        <Button size="xs" variant="ghost" icon={<CalendarClock className="size-3.5" />} onClick={() => {
+          const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(11, 0, 0, 0);
+          update.mutate({ id: t.id, dueAt: d.toISOString() });
+        }}>Tomorrow</Button>
+      )}
+    </>
+  );
   const groups = useMemo(() => {
     const g = new Map<string, Task[]>();
     for (const t of tasks.data?.tasks ?? []) {
@@ -65,6 +79,9 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
         eyebrow={mode === "mine" ? "Follow-ups" : "Tasks"}
         title={mode === "mine" ? "Follow-ups & reminders" : user?.role === "founder" ? "Assign tasks" : "Team tasks"}
         subtitle={mode === "mine" ? "Reminders pop up 15 minutes before each one. Missed ones escalate to your sales head after a day." : "Give anyone on the team a task — they're notified instantly."}
+        actions={mode === "team" && (
+          <Button variant="primary" className="xl:hidden" icon={<Plus className="size-4" />} onClick={() => setAssigning(true)}>Assign a task</Button>
+        )}
       />
       <div className={cn("grid gap-5", mode === "team" && "xl:grid-cols-[1fr_380px]")}>
         <div>
@@ -90,34 +107,28 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
                 <Card spotlight={false} className="divide-y divide-line overflow-hidden">
                   <AnimatePresence initial={false}>
                     {items.map((t) => (
-                      <motion.div key={t.id} layout exit={{ opacity: 0, x: 40, height: 0 }} className="flex items-center gap-3 px-4 py-3">
+                      <motion.div key={t.id} layout exit={{ opacity: 0, x: 40, height: 0 }} className="flex items-start gap-3 px-4 py-3 sm:items-center">
                         <motion.button
                           whileTap={{ scale: 0.8 }}
                           disabled={t.status !== "open"}
                           onClick={(e) => { update.mutate({ id: t.id, status: "done" }); celebrate(e.clientX, e.clientY); }}
-                          className={cn("grid size-6 shrink-0 place-items-center rounded-full border-2 transition", t.status === "done" ? "border-success bg-success text-white" : "border-line-strong hover:border-success hover:bg-success-soft")}
+                          className={cn("relative mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2 transition before:absolute before:-inset-2.5 before:content-[''] sm:mt-0", t.status === "done" ? "border-success bg-success text-white" : "border-line-strong hover:border-success hover:bg-success-soft")}
                           aria-label="Mark done"
                         >
                           {t.status === "done" && <Check className="size-3.5" />}
                         </motion.button>
                         <div className="min-w-0 flex-1">
-                          <p className={cn("truncate text-sm font-semibold", t.status === "done" ? "text-muted line-through" : "text-fg")}>
+                          <p className={cn("line-clamp-2 text-sm font-semibold sm:line-clamp-none sm:truncate", t.status === "done" ? "text-muted line-through" : "text-fg")}>
                             {t.contact_id ? <Link to={`${base}/contacts/${t.contact_id}`} className="hover:text-accent">{t.title}</Link> : t.title}
                           </p>
-                          <p className="truncate text-xs text-muted">
+                          <p className="line-clamp-2 text-xs text-muted sm:line-clamp-none sm:truncate">
                             {t.due_at ? `${fmtDate(t.due_at, { weekday: "short", day: "numeric", month: "short" })} · ${fmtTime(t.due_at)}` : "No due date"}
                             {t.company_name ? ` · ${t.company_name}` : ""}{t.reason ? ` · ${t.reason}` : ""}
                           </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 empty:hidden sm:hidden">{extras(t)}</div>
                         </div>
-                        {mode === "team" && t.assignee_name && <span className="hidden items-center gap-1.5 text-xs text-muted sm:flex"><Avatar name={t.assignee_name} hue={t.assignee_hue} size={22} />{t.assignee_name.split(" ")[0]}</span>}
-                        {t.priority !== "normal" && <Badge tone={PRIORITY_TONE[t.priority]}><Flag className="size-3" />{t.priority}</Badge>}
-                        {t.status === "open" && (
-                          <Button size="xs" variant="ghost" onClick={() => {
-                            const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(11, 0, 0, 0);
-                            update.mutate({ id: t.id, dueAt: d.toISOString() });
-                          }}>Tomorrow</Button>
-                        )}
-                        {t.contact_id && t.status === "open" && mode === "mine" && <CallButton size="sm" label="" contact={{ id: t.contact_id, full_name: t.contact_name ?? "", company_name: t.company_name, phone_key: t.contact_phone }} />}
+                        <div className="hidden shrink-0 items-center gap-2 sm:flex">{extras(t)}</div>
+                        {t.contact_id && t.status === "open" && mode === "mine" && <CallButton size="sm" label="" className="shrink-0" contact={{ id: t.contact_id, full_name: t.contact_name ?? "", company_name: t.company_name, phone_key: t.contact_phone }} />}
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -126,13 +137,27 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
             ))}
           </div>
         </div>
-        {mode === "team" && <AssignTask people={people.data?.users ?? []} />}
+        {mode === "team" && <div className="hidden xl:block"><AssignTask people={people.data?.users ?? []} /></div>}
       </div>
+      {mode === "team" && (
+        <Modal open={assigning} onClose={() => setAssigning(false)} title="Assign a task" icon={<ListTodo className="size-5" />}>
+          <AssignForm people={people.data?.users ?? []} onDone={() => setAssigning(false)} />
+        </Modal>
+      )}
     </div>
   );
 }
 
 function AssignTask({ people }: { people: any[] }) {
+  return (
+    <Card className="h-fit xl:sticky xl:top-24" delay={0.1}>
+      <CardHeader title="Assign a task" icon={<ListTodo className="size-4" />} />
+      <div className="px-5 pb-5"><AssignForm people={people} /></div>
+    </Card>
+  );
+}
+
+function AssignForm({ people, onDone }: { people: any[]; onDone?: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
@@ -145,24 +170,22 @@ function AssignTask({ people }: { people: any[] }) {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       toast({ kind: "success", title: "Task assigned", body: "They've been notified." });
       setF((x) => ({ ...x, title: "", reason: "" }));
+      onDone?.();
     },
     onError: (e) => toast({ kind: "error", title: "Couldn't assign", body: (e as Error).message }),
   });
   const choices = people.filter((p) => p.status === "active" && (user?.role !== "legion" || p.role === "legion"));
   return (
-    <Card className="h-fit xl:sticky xl:top-24" delay={0.1}>
-      <CardHeader title="Assign a task" icon={<ListTodo className="size-4" />} />
-      <div className="space-y-3 px-5 pb-5">
-        <Field label="To"><Select value={f.assignedTo} onChange={(e) => setF({ ...f, assignedTo: e.target.value })}><option value="">Choose a teammate…</option>{choices.map((p) => <option key={p.id} value={p.id}>{p.full_name} · {p.title ?? p.role}</option>)}</Select></Field>
-        <Field label="Task"><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Re-call every 'interested' lead from last week" /></Field>
-        <Field label="Details"><Textarea value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className="min-h-20" /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Due"><Input type="datetime-local" value={f.dueAt} onChange={(e) => setF({ ...f, dueAt: e.target.value })} /></Field>
-          <Field label="Priority"><Select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></Select></Field>
-        </div>
-        <Button variant="primary" className="w-full" disabled={!f.assignedTo || !f.title} loading={save.isPending} onClick={() => save.mutate()} icon={<Send className="size-4" />}>Assign task</Button>
+    <div className="space-y-3">
+      <Field label="To"><Select value={f.assignedTo} onChange={(e) => setF({ ...f, assignedTo: e.target.value })}><option value="">Choose a teammate…</option>{choices.map((p) => <option key={p.id} value={p.id}>{p.full_name} · {p.title ?? p.role}</option>)}</Select></Field>
+      <Field label="Task"><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Re-call every 'interested' lead from last week" /></Field>
+      <Field label="Details"><Textarea value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} className="min-h-20" /></Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Due"><Input type="datetime-local" value={f.dueAt} onChange={(e) => setF({ ...f, dueAt: e.target.value })} /></Field>
+        <Field label="Priority"><Select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></Select></Field>
       </div>
-    </Card>
+      <Button variant="primary" className="w-full" disabled={!f.assignedTo || !f.title} loading={save.isPending} onClick={() => save.mutate()} icon={<Send className="size-4" />}>Assign task</Button>
+    </div>
   );
 }
 

@@ -178,6 +178,40 @@ body {
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+}
+
+/*
+ * Phones and tablets. Taps respond at once (no double-tap-to-zoom delay) and
+ * without the grey flash. iOS zooms the whole page into any form field whose
+ * text is under 16px, so on touch screens fields stay at 16px.
+ */
+a,
+button,
+[role="button"],
+input,
+select,
+textarea,
+label,
+summary {
+  touch-action: manipulation;
+}
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+/* Below the desktop sidebar breakpoint a tab bar sits at the bottom of the
+   screen: floating cards and toasts stay above it. */
+@media (max-width: 1023.98px) {
+  .above-tabbar {
+    bottom: calc(5.25rem + env(safe-area-inset-bottom));
+  }
 }
 
 /*

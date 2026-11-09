@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { CalendarClock, GripVertical, KanbanSquare, Plus, Swords } from "lucide-react";
+import { ArrowRightLeft, CalendarClock, Check, GripVertical, KanbanSquare, Plus, Swords } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { celebrate } from "../../components/motion";
 import { useToast } from "../../components/toast";
-import { Avatar, Badge, Button, Empty, PageHeader, Skeleton, Tabs } from "../../components/ui";
+import { Avatar, Badge, Button, Empty, Modal, PageHeader, Skeleton, Tabs } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { cn, fmtDateTime, label, STAGES, STATUS_TONE } from "../../lib/format";
@@ -34,6 +34,8 @@ export default function Pipeline() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
+  // Fingers can't drag cards: Move opens a stage picker instead.
+  const [moving, setMoving] = useState<Contact | null>(null);
   // Founders, sales heads and Legion can add at any stage; salespeople add prospects.
   const canPlace = user?.role === "founder" || user?.role === "sales_head" || user?.role === "legion";
   const base = `/${user?.portal}`;
@@ -66,7 +68,7 @@ export default function Pipeline() {
       <PageHeader
         eyebrow="Pipeline"
         title="The board"
-        subtitle="Prospect → Qualified → Legion Meet 1 → 2 → 3. Drag a card to move it, or add someone straight into any column."
+        subtitle={<>Prospect → Qualified → Legion Meet 1 → 2 → 3. <span className="pointer-coarse:hidden">Drag a card to move it</span><span className="hidden pointer-coarse:inline">Tap Move on a card to change its stage</span>, or add someone straight into any column.</>}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {user?.role !== "sales_rep" && <Tabs value={scope} onChange={setScope} items={[{ value: "all", label: "Whole team" }, { value: "mine", label: "Mine" }]} />}
@@ -166,7 +168,17 @@ export default function Pipeline() {
                           </div>
                           <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pl-6">
                             <Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{label(c.status)}</Badge>
-                            <Temperature value={c.temperature} />
+                            <span className="flex items-center gap-2">
+                              <Temperature value={c.temperature} />
+                              <button
+                                type="button"
+                                onClick={() => setMoving(c)}
+                                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted ring-1 ring-line transition hover:text-accent hover:ring-brand-300 pointer-coarse:py-1.5 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
+                                aria-label={`Move ${c.full_name} to another stage`}
+                              >
+                                <ArrowRightLeft className="size-3.5" /> Move
+                              </button>
+                            </span>
                           </div>
                           {c.meeting_at && (
                             <p className="mt-2 flex items-center gap-1.5 pl-6 text-[11px] font-semibold text-accent"><CalendarClock className="size-3.5" /> {fmtDateTime(c.meeting_at)}</p>
@@ -188,6 +200,32 @@ export default function Pipeline() {
         </LayoutGroup>
       )}
       <AddProspect open={adding !== null} stage={adding ?? undefined} onClose={() => setAdding(null)} />
+      <Modal open={moving !== null} onClose={() => setMoving(null)} title={moving ? `Move ${moving.full_name}` : "Move"} subtitle="Pick the stage" icon={<ArrowRightLeft className="size-5" />} size="sm">
+        <div className="space-y-2">
+          {STAGES.map((st) => {
+            const current = moving?.stage === st.key;
+            return (
+              <button
+                key={st.key}
+                type="button"
+                disabled={current || move.isPending}
+                onClick={() => { if (moving) move.mutate({ id: moving.id, stage: st.key }); setMoving(null); }}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition",
+                  current ? "border-brand-300 bg-accent-soft" : "border-line hover:border-brand-300 hover:bg-surface-hover active:scale-[0.99]",
+                )}
+              >
+                {st.key.startsWith("legion") ? <Swords className="size-4 shrink-0 text-accent" /> : <KanbanSquare className="size-4 shrink-0 text-muted" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-fg">{st.label}</span>
+                  <span className="block text-xs text-muted">{st.hint}</span>
+                </span>
+                {current && <span className="flex items-center gap-1 text-xs font-semibold text-accent"><Check className="size-3.5" /> Now</span>}
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -88,21 +88,21 @@ export default function Prospects({ scope }: { scope: "mine" | "all" }) {
       <Card className="mb-4 p-3" spotlight={false}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="flex-1"><Input icon={<Search className="size-4" />} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, phone, email, city…" /></div>
-          <div className="flex flex-wrap gap-2">
-            <Select value={stage} onChange={(e) => setStage(e.target.value)} className="w-auto min-w-36">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Select value={stage} onChange={(e) => setStage(e.target.value)} className="w-auto min-w-36 max-sm:w-full max-sm:min-w-0">
               <option value="">All stages</option>
               {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </Select>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-auto min-w-40">
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
               <option value="">All statuses</option>
               {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
-            <Select value={campaign} onChange={(e) => setCampaign(e.target.value)} className="w-auto min-w-40">
+            <Select value={campaign} onChange={(e) => setCampaign(e.target.value)} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
               <option value="">All campaigns</option>
               {(facets.data?.campaigns ?? []).filter((c: any) => c.value).map((c: any) => <option key={c.value} value={c.value}>{c.value} ({c.count})</option>)}
             </Select>
             {scope === "all" && (
-              <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="w-auto min-w-40">
+              <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="w-auto min-w-40 max-sm:w-full max-sm:min-w-0">
                 <option value="">Any owner</option>
                 {(people.data?.users ?? []).filter((u) => ["sales_rep", "sales_head"].includes(u.role)).map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
               </Select>
