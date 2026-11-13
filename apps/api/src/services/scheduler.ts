@@ -1,4 +1,3 @@
-import cron from "node-cron";
 import { db, json } from "../db/index.js";
 import { pruneEvents } from "../lib/bus.js";
 import { drain } from "./jobs.js";
@@ -139,8 +138,10 @@ export async function opportunisticMaintenance() {
   await drain({ budgetMs: 120_000, concurrency: 3 });
 }
 
-export function startScheduler() {
+export async function startScheduler() {
   if (!env.inProcessScheduler) return;
+  // Only the long-running server keeps a clock; serverless never loads it.
+  const { default: cron } = await import("node-cron");
   cron.schedule("* * * * *", () => {
     sendDueReminders().catch((e) => console.error("[scheduler] reminders", e));
     maybeRunDailyReports().catch((e) => console.error("[scheduler] daily reports", e));

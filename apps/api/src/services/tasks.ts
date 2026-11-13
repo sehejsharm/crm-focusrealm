@@ -100,12 +100,22 @@ export async function listTasks(user: AuthUser, f: { scope: "mine" | "team" | "c
   else if (f.scope === "created") add("t.created_by = ?", user.id);
   if (f.userId && user.role !== "sales_rep") add("t.assigned_to = ?", f.userId);
   if (f.status === "overdue") where.push("t.status = 'open' and t.due_at < now()");
+  else if (f.status === "open") where.push("t.status = 'open'");
   else if (f.status) add("t.status = ?", f.status);
   if (f.from) add("t.due_at >= ?", f.from);
   if (f.to) add("t.due_at < ?", f.to);
   if (f.contactId) add("t.contact_id = ?", f.contactId);
   const w = where.length ? `where ${where.join(" and ")}` : "";
-  return db.many(`select ${TASK_SELECT} ${TASK_FROM} ${w} order by (t.status = 'open') desc, t.due_at asc nulls last limit 500`, params);
+  // With one status picked, "open first" is the same for every row; leaving
+  // it out lets Postgres read the tasks straight off an index. Open work is
+  // listed soonest first. Finished or missed work is listed latest first, so
+  // the 500 shown are the recent ones, not the oldest on record.
+  const order = !f.status
+    ? "(t.status = 'open') desc, t.due_at asc nulls last"
+    : f.status === "open" || f.status === "overdue"
+      ? "t.due_at asc nulls last"
+      : "t.due_at desc nulls last";
+  return db.many(`select ${TASK_SELECT} ${TASK_FROM} ${w} order by ${order} limit 500`, params);
 }
 
 export async function updateTask(user: AuthUser, id: string, patch: { status?: "open" | "done" | "missed" | "cancelled"; dueAt?: string | null; title?: string; reason?: string | null; priority?: string }) {

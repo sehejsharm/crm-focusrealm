@@ -149,27 +149,28 @@ api.get("/contacts/board", async (req, res) => {
        (select m.scheduled_at from crm_meetings m where m.contact_id = c.id and m.status = 'scheduled' order by m.scheduled_at limit 1) as meeting_at`;
   const from = `from crm_contacts c left join crm_companies co on co.id = c.company_id left join crm_users o on o.id = c.owner_id
      where c.status not in ('disqualified','closed_lost')`;
-  // Everything that is assigned or past the first stage…
-  const worked = await db.many(
-    `select ${cols} ${from} and ($1::uuid is null or c.owner_id = $1 or c.legion_owner_id = $1)
-       and (c.stage <> 'prospect' or c.owner_id is not null)
-     order by c.updated_at desc limit 600`,
-    [me],
-  );
-  // …plus unassigned prospects, newest first, so anything just added by hand
-  // or imported shows up on the board straight away. The full pool can be
-  // thousands of rows, so only the latest are listed; the count shows the rest.
-  let pool: any[] = [];
-  let poolTotal = 0;
-  if (!me && (req.user!.role === "founder" || req.user!.role === "sales_head")) {
-    pool = await db.many(
-      `select ${cols} ${from} and c.stage = 'prospect' and c.owner_id is null order by c.created_at desc limit 150`,
-    );
-    poolTotal = (await db.one<{ n: number }>(
-      `select count(*)::int as n from crm_contacts c where c.status not in ('disqualified','closed_lost') and c.stage = 'prospect' and c.owner_id is null`,
-    )).n;
-  }
-  res.json({ rows: [...pool, ...worked], poolTotal });
+  const withPool = !me && (req.user!.role === "founder" || req.user!.role === "sales_head");
+  const [worked, pool, poolCount] = await Promise.all([
+    // Everything that is assigned or past the first stage…
+    db.many(
+      `select ${cols} ${from} and ($1::uuid is null or c.owner_id = $1 or c.legion_owner_id = $1)
+         and (c.stage <> 'prospect' or c.owner_id is not null)
+       order by c.updated_at desc limit 600`,
+      [me],
+    ),
+    // …plus unassigned prospects, newest first, so anything just added by hand
+    // or imported shows up on the board straight away. The full pool can be
+    // thousands of rows, so only the latest are listed; the count shows the rest.
+    withPool
+      ? db.many(`select ${cols} ${from} and c.stage = 'prospect' and c.owner_id is null order by c.created_at desc limit 150`)
+      : Promise.resolve([]),
+    withPool
+      ? db.one<{ n: number }>(
+          `select count(*)::int as n from crm_contacts c where c.status not in ('disqualified','closed_lost') and c.stage = 'prospect' and c.owner_id is null`,
+        )
+      : Promise.resolve({ n: 0 }),
+  ]);
+  res.json({ rows: [...pool, ...worked], poolTotal: poolCount.n });
 });
 
 api.post("/contacts", async (req, res) => {
@@ -662,8 +663,10 @@ api.post("/jobs/retry", founder, async (req, res) => {
 // ----------------------------------------------------------- notifications
 
 api.get("/notifications", async (req, res) => {
-  const rows = await db.many(`select * from crm_notifications where user_id = $1 order by created_at desc limit 60`, [req.user!.id]);
-  const unread = await db.one(`select count(*)::int as n from crm_notifications where user_id = $1 and read_at is null`, [req.user!.id]);
+  const [rows, unread] = await Promise.all([
+    db.many(`select * from crm_notifications where user_id = $1 order by created_at desc limit 60`, [req.user!.id]),
+    db.one(`select count(*)::int as n from crm_notifications where user_id = $1 and read_at is null`, [req.user!.id]),
+  ]);
   res.json({ notifications: rows, unread: unread.n });
 });
 
@@ -681,6 +684,9 @@ api.get("/search", async (req, res) => {
   if (q.length < 2) return res.json({ contacts: [], people: [], calls: [] });
   const like = `%${q.toLowerCase()}%`;
   const mine = req.user!.role === "sales_rep" ? req.user!.id : null;
+  // Call IDs look like FRC-261014-00042. A name can never match one, so only
+  // search the (large) calls table when the text could be part of an ID.
+  const couldBeCallCode = /^[frc\d-]+$/i.test(q);
   const [contacts, people, calls] = await Promise.all([
     db.many(
       `select c.id, c.full_name, c.stage, c.status, co.name as company_name from crm_contacts c left join crm_companies co on co.id = c.company_id
@@ -691,11 +697,13 @@ api.get("/search", async (req, res) => {
     isManager(req.user) || req.user!.role === "legion"
       ? db.many(`select id, full_name, role, employee_code, avatar_hue from crm_users where lower(full_name) like $1 or lower(employee_code) like $1 limit 5`, [like])
       : Promise.resolve([]),
-    db.many(
-      `select k.id, k.call_code, c.full_name as contact_name from crm_calls k join crm_contacts c on c.id = k.contact_id
-       where ($2::uuid is null or k.user_id = $2) and lower(k.call_code) like $1 limit 5`,
-      [like, mine],
-    ),
+    couldBeCallCode
+      ? db.many(
+          `select k.id, k.call_code, c.full_name as contact_name from crm_calls k join crm_contacts c on c.id = k.contact_id
+           where ($2::uuid is null or k.user_id = $2) and lower(k.call_code) like $1 limit 5`,
+          [like, mine],
+        )
+      : Promise.resolve([]),
   ]);
   res.json({ contacts, people, calls });
 });

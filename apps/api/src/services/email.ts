@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import nodemailer, { type Transporter } from "nodemailer";
+import type { Transporter } from "nodemailer";
 import { env } from "../env.js";
 
 /**
@@ -26,6 +26,9 @@ export async function sendMail(mail: Mail): Promise<{ delivered: boolean; via: "
   const to = [...new Set(mail.to.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (!to.length) throw new Error("No recipients");
   if (emailConfigured()) {
+    // Loaded on first use: most deployments never send email, and skipping
+    // the library makes every cold start quicker.
+    const { default: nodemailer } = await import("nodemailer");
     transport ??= nodemailer.createTransport({
       host: env.smtp.host,
       port: env.smtp.port,

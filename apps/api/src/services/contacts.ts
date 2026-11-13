@@ -114,19 +114,43 @@ export async function listContacts(user: AuthUser, f: ListFilters) {
     where.push(`${STALE_SQL.replace("$STALE", `$${params.length}`)}`);
   }
 
-  const order = {
-    recent: "c.updated_at desc",
-    name: "c.full_name asc",
-    next_action: "next_task_at asc nulls last, c.updated_at desc",
-    temperature: "c.temperature desc nulls last, c.updated_at desc",
-  }[f.sort ?? "recent"];
+  // Two steps in one query. The inner part only decides which prospects are
+  // on this page; the outer part then loads the full row (company, owner,
+  // next task) for those few. Loading everything at once made Postgres look
+  // up the next task of every prospect it sorted past, on every page.
+  const sort = f.sort ?? "recent";
+  const company = f.q ? "left join crm_companies co on co.id = c.company_id" : "";
+  // Earliest open task per prospect, worked out once for the whole list.
+  const nextTask =
+    sort === "next_action"
+      ? "left join (select contact_id, min(due_at) as due_at from crm_tasks where status = 'open' group by contact_id) nt on nt.contact_id = c.id"
+      : "";
+  const order = (due: string) =>
+    ({
+      recent: "c.updated_at desc, c.id",
+      name: "c.full_name asc, c.id",
+      next_action: `${due} asc nulls last, c.updated_at desc, c.id`,
+      temperature: "c.temperature desc nulls last, c.updated_at desc, c.id",
+    })[sort];
   const w = where.length ? `where ${where.join(" and ")}` : "";
-  const total = await db.one<{ n: number }>(`select count(*) as n ${CONTACT_FROM} ${w}`, params);
-  params.push(f.pageSize, (f.page - 1) * f.pageSize);
-  const rows = await db.many(
-    `select ${CONTACT_SELECT} ${CONTACT_FROM} ${w} order by ${order} limit $${params.length - 1} offset $${params.length}`,
-    params,
-  );
+  const [total, rows] = await Promise.all([
+    db.one<{ n: number }>(`select count(*) as n from crm_contacts c ${company} ${w}`, params),
+    db.many(
+      `select ${CONTACT_SELECT}
+       from (
+         select c.id as page_id${nextTask ? ", nt.due_at as page_due" : ""}
+         from crm_contacts c ${company} ${nextTask} ${w}
+         order by ${order("nt.due_at")}
+         limit $${params.length + 1} offset $${params.length + 2}
+       ) page
+       join crm_contacts c on c.id = page.page_id
+       left join crm_companies co on co.id = c.company_id
+       left join crm_users o on o.id = c.owner_id
+       left join crm_users l on l.id = c.legion_owner_id
+       order by ${order("page.page_due")}`,
+      [...params, f.pageSize, (f.page - 1) * f.pageSize],
+    ),
+  ]);
   return { total: total.n, page: f.page, pageSize: f.pageSize, rows: rows.map(presentContact) };
 }
 

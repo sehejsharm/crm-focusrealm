@@ -11,7 +11,7 @@ async function main() {
     console.log(`[api] Focus Realm CRM listening on :${env.port} (${db.kind})`);
   });
   startWorker({ concurrency: db.kind === "postgres" ? 3 : 1 });
-  startScheduler();
+  await startScheduler();
 
   const shutdown = async () => {
     stopWorker();

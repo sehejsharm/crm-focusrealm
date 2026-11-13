@@ -1,5 +1,6 @@
 import { db } from "../db/index.js";
 import type { AuthUser } from "../lib/auth.js";
+import { remember } from "../lib/cache.js";
 import { addDays, dayBounds, todayLocal } from "../lib/time.js";
 import { ACTIVE_STATUSES } from "./allocation.js";
 import { CONNECTED } from "./calls.js";
@@ -90,7 +91,16 @@ export async function dailySeries(userId: string | null, days: number) {
 /** Team pulse for sales heads, founders and Legion: everyone's day at a glance. */
 export async function teamDashboard(date = todayLocal()) {
   const { from, to } = dayBounds(date);
-  const people = await db.many(
+  const [people, feed, series] = await Promise.all([teamPeople(from, to, date), teamFeed(), dailySeries(null, 14)]);
+  const totals = people.reduce(
+    (a, p) => ({ calls: a.calls + p.calls, connected: a.connected + p.connected, meetings: a.meetings + p.meetings, talk_sec: a.talk_sec + p.talk_sec }),
+    { calls: 0, connected: 0, meetings: 0, talk_sec: 0 },
+  );
+  return { date, people, totals, feed, series };
+}
+
+function teamPeople(from: Date, to: Date, date: string) {
+  return db.many(
     `select u.id, u.full_name, u.employee_code, u.role, u.title, u.avatar_hue, u.daily_call_target, u.last_active_at, u.status, u.source,
        count(k.id)::int as calls,
        count(k.id) filter (where k.outcome in ${connectedList})::int as connected,
@@ -109,23 +119,26 @@ export async function teamDashboard(date = todayLocal()) {
      group by u.id order by calls desc, u.full_name`,
     [from, to, date],
   );
-  const totals = people.reduce(
-    (a, p) => ({ calls: a.calls + p.calls, connected: a.connected + p.connected, meetings: a.meetings + p.meetings, talk_sec: a.talk_sec + p.talk_sec }),
-    { calls: 0, connected: 0, meetings: 0, talk_sec: 0 },
-  );
-  const feed = await db.many(
+}
+
+function teamFeed() {
+  return db.many(
     `select a.id, a.kind, a.title, a.body, a.created_at, a.contact_id, u.full_name as user_name, u.avatar_hue, c.full_name as contact_name
      from crm_activities a left join crm_users u on u.id = a.user_id left join crm_contacts c on c.id = a.contact_id
      order by a.created_at desc limit 40`,
   );
-  return { date, people, totals, feed, series: await dailySeries(null, 14) };
 }
 
 /** Founder command centre: funnel, conversion, bottlenecks, intelligence. */
 export async function founderDashboard() {
   const today = todayLocal();
   const monthStart = dayBounds(addDays(today, -29)).from;
-  const [funnel, statusCounts, byCampaign, bySegment, byRep, overdue, unassigned, objectionTrend, productFeedback, frameworkAvg, rates, jobs, meetingsUpcoming, handoffsPending] = await Promise.all([
+  const { staleDays, autoEnabled } = await getSetting("allocation");
+  // Everything below is independent, so it all runs together.
+  const [
+    funnel, statusCounts, byCampaign, bySegment, byRep, overdue, unassigned, objectionTrend, productFeedback, frameworkAvg, rates, jobs,
+    meetingsUpcoming, handoffsPending, prevRates, attention, stale, followUpCompliance, series,
+  ] = await Promise.all([
     db.many(`select stage, count(*)::int as count from crm_contacts where status not in ('disqualified') group by stage`),
     db.many(`select status, count(*)::int as count from crm_contacts group by status`),
     db.many(
@@ -141,14 +154,22 @@ export async function founderDashboard() {
          count(*) filter (where status = 'closed_won')::int as won
        from crm_contacts group by 1 order by total desc limit 12`,
     ),
+    // One pass over the month's calls and one over the prospects, grouped by
+    // person, instead of five separate counts for every salesperson.
     db.many(
       `select u.id, u.full_name, u.avatar_hue,
-         (select count(*) from crm_calls k where k.user_id = u.id and k.started_at >= $1)::int as calls,
-         (select count(*) from crm_calls k where k.user_id = u.id and k.started_at >= $1 and k.outcome in ${connectedList})::int as connected,
-         (select round(avg(score)) from crm_calls k where k.user_id = u.id and k.started_at >= $1)::int as avg_score,
-         (select count(*) from crm_contacts c where c.owner_id = u.id and c.stage <> 'prospect')::int as qualified_plus,
-         (select count(*) from crm_contacts c where c.owner_id = u.id)::int as owned
-       from crm_users u where u.role in ('sales_rep','sales_head') and u.status = 'active' order by calls desc`,
+         coalesce(k.calls, 0)::int as calls, coalesce(k.connected, 0)::int as connected, k.avg_score::int as avg_score,
+         coalesce(c.qualified_plus, 0)::int as qualified_plus, coalesce(c.owned, 0)::int as owned
+       from crm_users u
+       left join (
+         select user_id, count(*) as calls, count(*) filter (where outcome in ${connectedList}) as connected, round(avg(score)) as avg_score
+         from crm_calls where started_at >= $1 group by user_id
+       ) k on k.user_id = u.id
+       left join (
+         select owner_id, count(*) filter (where stage <> 'prospect') as qualified_plus, count(*) as owned
+         from crm_contacts where owner_id is not null group by owner_id
+       ) c on c.owner_id = u.id
+       where u.role in ('sales_rep','sales_head') and u.status = 'active' order by calls desc`,
       [monthStart],
     ),
     db.one(`select count(*)::int as n from crm_tasks where status = 'open' and due_at < now()`),
@@ -165,20 +186,26 @@ export async function founderDashboard() {
        where i.kind in ('product_request','pain_point') and i.created_at >= $1 order by i.created_at desc limit 30`,
       [monthStart],
     ),
-    db.many(
-      `select f->>'framework' as framework, round(avg((f->>'score')::numeric), 1) as score, count(*)::int as n
-       from crm_calls k, jsonb_array_elements(k.analysis->'frameworks') f
-       where k.analysis is not null and k.started_at >= $1 group by 1 order by 2 desc`,
-      [monthStart],
+    // These two open the AI analysis of every call in the month, which is the
+    // slowest work on the page, and a 30-day average barely moves in a minute.
+    remember(`founder:frameworks:${today}`, 60_000, () =>
+      db.many(
+        `select f->>'framework' as framework, round(avg((f->>'score')::numeric), 1) as score, count(*)::int as n
+         from crm_calls k, jsonb_array_elements(k.analysis->'frameworks') f
+         where k.analysis is not null and k.started_at >= $1 group by 1 order by 2 desc`,
+        [monthStart],
+      ),
     ),
-    db.one(
-      `select count(*)::int as calls,
-         count(*) filter (where outcome in ${connectedList})::int as connected,
-         count(*) filter (where analysis->'prospect'->>'decision_maker' = 'yes')::int as decision_maker_reached,
-         count(*) filter (where analysis is not null)::int as analysed,
-         count(*) filter (where outcome = 'meeting_booked')::int as meetings
-       from crm_calls where started_at >= $1`,
-      [monthStart],
+    remember(`founder:rates:${today}`, 60_000, () =>
+      db.one(
+        `select count(*)::int as calls,
+           count(*) filter (where outcome in ${connectedList})::int as connected,
+           count(*) filter (where analysis->'prospect'->>'decision_maker' = 'yes')::int as decision_maker_reached,
+           count(*) filter (where analysis is not null)::int as analysed,
+           count(*) filter (where outcome = 'meeting_booked')::int as meetings
+         from crm_calls where started_at >= $1`,
+        [monthStart],
+      ),
     ),
     db.many(`select kind, status, count(*)::int as count from crm_jobs where status in ('queued','failed','running') group by kind, status`),
     db.many(
@@ -187,36 +214,39 @@ export async function founderDashboard() {
        left join crm_users l on l.id = m.legion_user_id where m.status = 'scheduled' and m.scheduled_at >= now() order by m.scheduled_at limit 30`,
     ),
     db.one(`select count(*)::int as n from crm_handoffs where status = 'pending'`),
+    // The same 30 days before, for the trend arrows. That window is over, so
+    // its numbers only change when the day rolls on.
+    remember(`founder:prev-rates:${today}`, 10 * 60_000, () =>
+      db.one(
+        `select count(*)::int as calls, count(*) filter (where outcome in ${connectedList})::int as connected,
+           count(*) filter (where outcome = 'meeting_booked')::int as meetings,
+           count(*) filter (where analysis->'prospect'->>'decision_maker' = 'yes')::int as decision_maker_reached,
+           count(*) filter (where analysis is not null)::int as analysed
+         from crm_calls where started_at >= $1 and started_at < $2`,
+        [new Date(monthStart.getTime() - 30 * 86400_000), monthStart],
+      ),
+    ),
+    // What a founder should look at today, in one place.
+    db.one(
+      `select
+         (select count(*) from crm_calls where analysis_status = 'needs_review')::int as reviews,
+         (select count(*) from crm_calls where mode <> 'demo' and recording_status in ('none','awaiting','failed')
+            and outcome in ${connectedList} and started_at > now() - interval '7 days')::int as missing_recordings,
+         (select count(*) from crm_daily_reports where status = 'failed' and report_date >= current_date - 2)::int as failed_reports,
+         (select count(*) from crm_jobs where status = 'failed')::int as failed_jobs`,
+    ),
+    db.one<{ n: number }>(`select count(*)::int as n from crm_contacts c where ${STALE_SQL.replace("$STALE", "$1")}`, [staleDays]),
+    db.one(
+      `select count(*) filter (where status = 'done')::int as done, count(*) filter (where status = 'missed')::int as missed
+       from crm_tasks where due_at >= $1 and due_at < now()`,
+      [monthStart],
+    ),
+    dailySeries(null, 30),
   ]);
-  const { staleDays, autoEnabled } = await getSetting("allocation");
-  // The same 30 days before, for the trend arrows.
-  const prevRates = await db.one(
-    `select count(*)::int as calls, count(*) filter (where outcome in ${connectedList})::int as connected,
-       count(*) filter (where outcome = 'meeting_booked')::int as meetings,
-       count(*) filter (where analysis->'prospect'->>'decision_maker' = 'yes')::int as decision_maker_reached,
-       count(*) filter (where analysis is not null)::int as analysed
-     from crm_calls where started_at >= $1 and started_at < $2`,
-    [new Date(monthStart.getTime() - 30 * 86400_000), monthStart],
-  );
-  // What a founder should look at today, in one place.
-  const attention = await db.one(
-    `select
-       (select count(*) from crm_calls where analysis_status = 'needs_review')::int as reviews,
-       (select count(*) from crm_calls where mode <> 'demo' and recording_status in ('none','awaiting','failed')
-          and outcome in ${connectedList} and started_at > now() - interval '7 days')::int as missing_recordings,
-       (select count(*) from crm_daily_reports where status = 'failed' and report_date >= current_date - 2)::int as failed_reports,
-       (select count(*) from crm_jobs where status = 'failed')::int as failed_jobs`,
-  );
-  const stale = await db.one<{ n: number }>(`select count(*)::int as n from crm_contacts c where ${STALE_SQL.replace("$STALE", "$1")}`, [staleDays]);
-  const followUpCompliance = await db.one(
-    `select count(*) filter (where status = 'done')::int as done, count(*) filter (where status = 'missed')::int as missed
-     from crm_tasks where due_at >= $1 and due_at < now()`,
-    [monthStart],
-  );
   return {
     funnel, statusCounts, byCampaign, bySegment, byRep, overdue: overdue.n, unassigned: unassigned.n,
     objectionTrend, productFeedback, frameworkAvg, rates, followUpCompliance, jobs, meetingsUpcoming,
-    handoffsPending: handoffsPending.n, stale: stale.n, staleDays, series: await dailySeries(null, 30),
+    handoffsPending: handoffsPending.n, stale: stale.n, staleDays, series,
     prevRates, attention: { ...attention, autoTopUp: autoEnabled },
   };
 }

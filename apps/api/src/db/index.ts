@@ -1,3 +1,4 @@
+import { attachDatabasePool } from "@vercel/functions";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import pg from "pg";
@@ -35,20 +36,48 @@ const INT8 = 20;
 const NUMERIC = 1700;
 const DATE = 1082;
 
+const isReadOnly = (sql: string) => /^\s*(select|with)\b/i.test(sql) && !/\b(insert|update|delete|nextval|for\s+update)\b/i.test(sql);
+
+function connectionDropped(e: unknown) {
+  const err = e as { code?: string; message?: string };
+  return (
+    ["ECONNRESET", "EPIPE", "57P01", "08003", "08006"].includes(err?.code ?? "") ||
+    /Connection terminated|connection error and is not queryable|socket hang up/i.test(err?.message ?? "")
+  );
+}
+
 async function postgresDriver(): Promise<Driver> {
   pg.types.setTypeParser(INT8, (v) => Number(v));
   pg.types.setTypeParser(NUMERIC, (v) => Number(v));
   pg.types.setTypeParser(DATE, (v) => v);
 
   const needsSsl = env.databaseSsl && !/localhost|127\.0\.0\.1/.test(env.databaseUrl);
-  // On serverless, each instance keeps only a couple of connections — use
-  // Supabase's pooler URL (port 6543) so many instances can share Postgres.
+  // On serverless one instance serves several requests at once and a
+  // dashboard runs a dozen queries together, so it keeps a handful of
+  // connections. Use Supabase's pooler URL (port 6543): it shares a few real
+  // Postgres connections between every instance.
   const pool = new pg.Pool({
     connectionString: env.databaseUrl,
-    max: env.serverless ? 3 : 10,
-    idleTimeoutMillis: env.serverless ? 5_000 : 30_000,
+    max: env.serverless ? 6 : 10,
+    // Long enough that the connection is still open for the next click or
+    // live-update poll, so most requests skip the TLS + sign-in handshake.
+    idleTimeoutMillis: env.serverless ? 10_000 : 30_000,
+    connectionTimeoutMillis: 15_000,
+    keepAlive: true,
     ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
   });
+  // The pooler may close an idle connection at any time. Without a listener
+  // that 'error' event would take the whole process down.
+  pool.on("error", (e) => console.error("[db] idle connection dropped:", e.message));
+  // Vercel: keep the instance awake until idle connections have closed, so a
+  // paused instance never wakes up holding dead sockets.
+  if (env.serverless) {
+    try {
+      attachDatabasePool(pool);
+    } catch {
+      /* older runtime: the pool still works, just without that guarantee */
+    }
+  }
 
   const wrap = (c: pg.Pool | pg.PoolClient): Queryable => ({
     async query(sql, params) {
@@ -57,9 +86,24 @@ async function postgresDriver(): Promise<Driver> {
     },
   });
 
+  // A pooled connection can die between requests. A read is safe to run again
+  // on a fresh connection; a write is not (it may already have been applied).
+  const pooled = wrap(pool);
+  const direct: Queryable = {
+    async query(sql, params) {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await pooled.query(sql, params);
+        } catch (e) {
+          if (attempt >= 2 || !isReadOnly(sql) || !connectionDropped(e)) throw e;
+        }
+      }
+    },
+  };
+
   return {
     kind: "postgres",
-    ...wrap(pool),
+    ...direct,
     async exec(sql) {
       await pool.query(sql);
     },

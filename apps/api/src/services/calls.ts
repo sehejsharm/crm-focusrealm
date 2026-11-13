@@ -398,16 +398,27 @@ export async function listCalls(user: AuthUser, f: { userId?: string; contactId?
   if (f.recording === "uploaded") where.push("k.recording_status = 'uploaded'");
   if (f.recording === "missing") add("k.mode <> 'demo' and k.recording_status in ('none','awaiting','failed') and k.outcome = any(?::text[])", CONNECTED);
   const w = where.length ? `where ${where.join(" and ")}` : "";
-  const total = await db.one<{ n: number }>(`select count(*) as n ${CALL_FROM} ${w}`, params);
-  params.push(f.pageSize, (f.page - 1) * f.pageSize);
-  const rows = await db.many(
-    `select k.id, k.call_code, k.contact_id, k.user_id, k.mode, k.status, k.outcome, k.notes, k.started_at, k.duration_sec,
-       k.recording_status, k.transcript_status, k.analysis_status, k.score, k.analysis->>'summary' as summary,
-       k.analysis->'prospect'->>'temperature' as temperature,
-       c.full_name as contact_name, co.name as company_name, u.full_name as user_name, u.avatar_hue as user_hue
-     ${CALL_FROM} ${w} order by k.started_at desc limit $${params.length - 1} offset $${params.length}`,
-    params,
-  );
+  // Every filter is on the call itself, so the count and the choice of page
+  // read crm_calls alone; names are joined on only for the rows shown.
+  const [total, rows] = await Promise.all([
+    db.one<{ n: number }>(`select count(*) as n from crm_calls k ${w}`, params),
+    db.many(
+      `select k.id, k.call_code, k.contact_id, k.user_id, k.mode, k.status, k.outcome, k.notes, k.started_at, k.duration_sec,
+         k.recording_status, k.transcript_status, k.analysis_status, k.score, k.analysis->>'summary' as summary,
+         k.analysis->'prospect'->>'temperature' as temperature,
+         c.full_name as contact_name, co.name as company_name, u.full_name as user_name, u.avatar_hue as user_hue
+       from (
+         select k.id as page_id from crm_calls k ${w}
+         order by k.started_at desc, k.id limit $${params.length + 1} offset $${params.length + 2}
+       ) page
+       join crm_calls k on k.id = page.page_id
+       join crm_contacts c on c.id = k.contact_id
+       left join crm_companies co on co.id = c.company_id
+       join crm_users u on u.id = k.user_id
+       order by k.started_at desc, k.id`,
+      [...params, f.pageSize, (f.page - 1) * f.pageSize],
+    ),
+  ]);
   return { total: total.n, rows };
 }
 

@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { db } from "../db/index.js";
 import { env } from "../env.js";
+import { background } from "./bus.js";
 import { HttpError } from "./http.js";
 
 export type Role = "founder" | "sales_head" | "sales_rep" | "legion";
@@ -95,6 +96,9 @@ export function clearSessionCookie(res: Response) {
   res.clearCookie(COOKIE, { path: "/" });
 }
 
+const PRESENCE_EVERY_MS = 2 * 60_000;
+const presenceWrittenAt = new Map<string, number>();
+
 /**
  * Loads the signed-in person on every request, from the database, so that an
  * offboarding or password reset (which bumps token_version) locks them out
@@ -108,8 +112,15 @@ export async function loadUser(req: Request, _res: Response, next: NextFunction)
     const user = await db.maybe<AuthUser>(`select ${USER_COLUMNS} from crm_users where id = $1`, [claims.sub]);
     if (user && user.status === "active" && user.token_version === claims.tv) {
       req.user = user;
-      // Cheap presence signal for "who's online" and inactivity flags.
-      db.query("update crm_users set last_active_at = now() where id = $1 and (last_active_at is null or last_active_at < now() - interval '2 minutes')", [user.id]).catch(() => {});
+      // Presence signal for "who's online" and inactivity flags. At most one
+      // write per person every two minutes, not an extra query per request.
+      const now = Date.now();
+      if (now - (presenceWrittenAt.get(user.id) ?? 0) >= PRESENCE_EVERY_MS) {
+        presenceWrittenAt.set(user.id, now);
+        background(
+          db.query("update crm_users set last_active_at = now() where id = $1 and (last_active_at is null or last_active_at < now() - interval '2 minutes')", [user.id]),
+        );
+      }
     }
   } catch {
     // Expired or tampered token: treat as signed out.
