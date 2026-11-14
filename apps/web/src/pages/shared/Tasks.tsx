@@ -63,6 +63,9 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
       )}
     </>
   );
+  // Sliding rows into place means measuring every row on each change: fine
+  // for a short list, slow for hundreds.
+  const few = (tasks.data?.tasks.length ?? 0) <= 40;
   const groups = useMemo(() => {
     const g = new Map<string, Task[]>();
     for (const t of tasks.data?.tasks ?? []) {
@@ -107,7 +110,7 @@ export default function Tasks({ mode }: { mode: "mine" | "team" }) {
                 <Card spotlight={false} className="divide-y divide-line overflow-hidden">
                   <AnimatePresence initial={false}>
                     {items.map((t) => (
-                      <motion.div key={t.id} layout exit={{ opacity: 0, x: 40, height: 0 }} className="flex items-start gap-3 px-4 py-3 sm:items-center">
+                      <motion.div key={t.id} layout={few} exit={{ opacity: 0, x: 40, height: 0 }} className="offscreen-skip flex items-start gap-3 px-4 py-3 sm:items-center">
                         <motion.button
                           whileTap={{ scale: 0.8 }}
                           disabled={t.status !== "open"}

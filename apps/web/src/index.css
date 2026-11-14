@@ -4,8 +4,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  /* Bundled with the app (see main.tsx), not fetched from Google Fonts. */
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* Focus Realm brand blues — the same scale as the HR console & Workspace. */
   --color-brand-50: #eff6ff;
@@ -231,6 +232,42 @@ main pre,
 main code,
 .whitespace-nowrap {
   overflow-wrap: normal;
+}
+
+/*
+ * Long lists: the browser skips laying out and painting rows that are off
+ * screen, and does them as they scroll into view. The size is a placeholder
+ * until a row has been seen once.
+ */
+.offscreen-skip {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+
+/*
+ * Android phones and tablets: a see-through, blurred bar has to re-blur
+ * whatever scrolls beneath it on every frame, which is what makes scrolling
+ * stutter on mid-range phones. There the bars are simply near-solid. iPhones
+ * and iPads (the @supports test) handle the blur well and keep it.
+ */
+@media (pointer: coarse) {
+  @supports not (-webkit-touch-callout: none) {
+    :root {
+      --glass: rgba(255, 255, 255, 0.97);
+    }
+    .dark {
+      --glass: rgba(12, 19, 32, 0.97);
+    }
+    .glass,
+    .backdrop-blur-sm,
+    .backdrop-blur,
+    .backdrop-blur-md,
+    .backdrop-blur-lg,
+    .backdrop-blur-xl {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
 }
 
 ::selection {

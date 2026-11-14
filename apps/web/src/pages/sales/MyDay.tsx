@@ -13,7 +13,7 @@ import { ago, cn, duration, fmtTime, greeting, label, minutes, OUTCOME_TONE, sco
 
 export default function MyDay() {
   const { user } = useAuth();
-  const q = useQuery({ queryKey: ["dash", "rep"], queryFn: () => api.get<any>("/dashboard/rep"), refetchInterval: 60_000 });
+  const q = useQuery({ queryKey: ["dash", "rep"], queryFn: () => api.get<any>("/dashboard/rep"), refetchInterval: 120_000 });
   const d = q.data;
   const pct = d ? Math.min(100, Math.round((d.kpi.calls_today / Math.max(1, d.target)) * 100)) : 0;
   const spark = (key: string) => (d?.trend ?? []).map((t: any) => t[key] ?? 0);
@@ -215,7 +215,7 @@ function HeroChip({ icon, label, value }: { icon: ReactNode; label: string; valu
 
 /** A nudge when connected calls still have no recording — no recording, no AI coaching. */
 function MissingRecordings() {
-  const q = useQuery({ queryKey: ["recordings"], queryFn: () => api.get<{ waiting: unknown[] }>("/calls/recordings"), refetchInterval: 60_000 });
+  const q = useQuery({ queryKey: ["recordings"], queryFn: () => api.get<{ waiting: unknown[] }>("/calls/recordings"), refetchInterval: 180_000 });
   const n = q.data?.waiting.length ?? 0;
   if (!n) return null;
   return (

@@ -61,6 +61,9 @@ export default function Pipeline() {
   });
 
   const rows = board.data?.rows ?? [];
+  // Cards glide to their new column on a small board. On a big one that means
+  // measuring hundreds of cards on every change, so they simply move.
+  const animateMoves = rows.length <= 150;
   // Unassigned prospects beyond the newest ones listed on the board.
   const poolExtra = Math.max(0, (board.data?.poolTotal ?? 0) - rows.filter((r) => r.stage === "prospect" && !r.owner_id).length);
   return (
@@ -142,8 +145,8 @@ export default function Pipeline() {
                     {cards.length === 0 && !active && <Empty className="py-8" icon={<KanbanSquare className="size-5" />} title="Empty" />}
                     {cards.slice(0, 150).map((c) => (
                       <motion.div
-                        layout
-                        layoutId={c.id}
+                        layout={animateMoves}
+                        layoutId={animateMoves ? c.id : undefined}
                         key={c.id}
                         transition={{ type: "spring", stiffness: 500, damping: 40 }}
                         className={cn("group relative", dragId === c.id && "opacity-40")}

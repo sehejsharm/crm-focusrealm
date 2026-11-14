@@ -46,7 +46,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<CallTarget | null>(null);
   const [wrapUp, setWrapUp] = useState<Call | null>(null);
   const [minimised, setMinimised] = useState(false);
-  useFastLive("call", Boolean(active));
+  // Check every 2 s while the call is being placed (the phone picking it up),
+  // then every 5 s: all that is left to hear about is the call ending.
+  const [placing, setPlacing] = useState(false);
+  const activeId = active?.id;
+  useEffect(() => {
+    if (!activeId) return;
+    setPlacing(true);
+    const t = setTimeout(() => setPlacing(false), 20_000);
+    return () => clearTimeout(t);
+  }, [activeId]);
+  useFastLive("call", Boolean(active), placing ? 2_000 : 5_000);
   // The "call ended" request, so logging the outcome waits for it to land first.
   const endingRef = useRef<Promise<unknown>>(Promise.resolve());
 

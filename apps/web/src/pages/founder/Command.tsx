@@ -25,8 +25,8 @@ function trend(now: number | undefined, before: number | undefined, goodWhenUp =
 
 export default function Command() {
   const { user, meta } = useAuth();
-  const q = useQuery({ queryKey: ["dash", "founder"], queryFn: () => api.get<any>("/dashboard/founder"), refetchInterval: 60_000 });
-  const team = useQuery({ queryKey: ["team", "today"], queryFn: () => api.get<any>("/dashboard/team"), refetchInterval: 20_000 });
+  const q = useQuery({ queryKey: ["dash", "founder"], queryFn: () => api.get<any>("/dashboard/founder"), refetchInterval: 120_000 });
+  const team = useQuery({ queryKey: ["team", "today"], queryFn: () => api.get<any>("/dashboard/team"), refetchInterval: 60_000 });
   const d = q.data;
   const [now, setNow] = useState(new Date());
   useEffect(() => {

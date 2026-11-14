@@ -5,6 +5,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ToastProvider } from "./components/toast";
+import "@fontsource-variable/geist/wght.css";
+import "@fontsource-variable/geist-mono/wght.css";
 import "./index.css";
 import { ApiError } from "./lib/api";
 import { AuthProvider } from "./lib/auth";
@@ -13,7 +15,7 @@ import { ThemeProvider } from "./lib/theme";
 const qc = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 15_000,
+      staleTime: 30_000,
       refetchOnWindowFocus: true,
       retry: (n, e) => !(e instanceof ApiError && e.status < 500) && n < 2,
     },

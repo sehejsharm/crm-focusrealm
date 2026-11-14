@@ -10,7 +10,7 @@ import { Progress } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, cn, OUTCOMES } from "../../lib/format";
-import { useFastLive, useLive, useLiveStatus } from "../../lib/live";
+import { useFastLive, useLive, useLiveCheck, useLiveStatus } from "../../lib/live";
 import { AUDIO_ACCEPT } from "../../lib/audio";
 import { uploadRecording } from "../../lib/recording";
 
@@ -34,15 +34,32 @@ export default function PhoneLink() {
   const qc = useQueryClient();
   const toast = useToast();
   const live = useLiveStatus();
-  useFastLive("phone");
+  const checkNow = useLiveCheck();
   const [dial, setDial] = useState<Dial | null>(null);
   const [stage, setStage] = useState<"ready" | "incoming" | "dialled" | "wrap">("ready");
+  // Waiting for a number: check every 2.5 s while the phone is in use, every
+  // 8 s once it has sat untouched for ten minutes. A tap always checks at once.
+  const [warm, setWarm] = useState(true);
+  const cool = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touched = () => {
+    setWarm(true);
+    if (cool.current) clearTimeout(cool.current);
+    cool.current = setTimeout(() => setWarm(false), 10 * 60_000);
+    if (stage === "ready") checkNow();
+  };
+  useEffect(() => {
+    touched();
+    return () => {
+      if (cool.current) clearTimeout(cool.current);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useFastLive("phone", stage === "ready", warm ? 2_500 : 8_000);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [attachFor, setAttachFor] = useState<string | null>(null);
 
-  const awaiting = useQuery({ queryKey: ["awaiting"], queryFn: () => api.get<{ calls: any[] }>("/calls/awaiting-recording"), refetchInterval: 30_000 });
+  const awaiting = useQuery({ queryKey: ["awaiting"], queryFn: () => api.get<{ calls: any[] }>("/calls/awaiting-recording"), refetchInterval: 120_000 });
 
   // A call started before this screen was opened.
   useEffect(() => {
@@ -55,6 +72,7 @@ export default function PhoneLink() {
   }, []);
 
   useLive("dial", (d: Dial) => {
+    touched();
     setDial(d);
     setStage("incoming");
     setOutcome(null);
@@ -109,7 +127,7 @@ export default function PhoneLink() {
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-gradient-to-b from-[#061a42] via-[#0b2a66] to-[#1655c0] text-white">
+    <div onPointerDown={touched} className="relative flex min-h-dvh flex-col overflow-hidden bg-gradient-to-b from-[#061a42] via-[#0b2a66] to-[#1655c0] text-white">
       <Aurora intensity={0.8} />
       <header className="relative flex items-center justify-between p-4">
         <Link to="/" className="flex items-center gap-2 text-sm text-white/70"><ArrowLeft className="size-4" /> CRM</Link>

@@ -1,4 +1,3 @@
-import { attachDatabasePool } from "@vercel/functions";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import pg from "pg";
@@ -61,7 +60,7 @@ async function postgresDriver(): Promise<Driver> {
     max: env.serverless ? 6 : 10,
     // Long enough that the connection is still open for the next click or
     // live-update poll, so most requests skip the TLS + sign-in handshake.
-    idleTimeoutMillis: env.serverless ? 10_000 : 30_000,
+    idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 15_000,
     keepAlive: true,
     ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
@@ -69,15 +68,11 @@ async function postgresDriver(): Promise<Driver> {
   // The pooler may close an idle connection at any time. Without a listener
   // that 'error' event would take the whole process down.
   pool.on("error", (e) => console.error("[db] idle connection dropped:", e.message));
-  // Vercel: keep the instance awake until idle connections have closed, so a
-  // paused instance never wakes up holding dead sockets.
-  if (env.serverless) {
-    try {
-      attachDatabasePool(pool);
-    } catch {
-      /* older runtime: the pool still works, just without that guarantee */
-    }
-  }
+  // Deliberately not using Vercel's attachDatabasePool here: it keeps the
+  // instance awake (and billed) after every request until idle connections
+  // close. With open tabs polling for live updates that would mean awake all
+  // day. A paused instance may instead wake to a dead socket, which the
+  // retry below absorbs for the read every request starts with.
 
   const wrap = (c: pg.Pool | pg.PoolClient): Queryable => ({
     async query(sql, params) {

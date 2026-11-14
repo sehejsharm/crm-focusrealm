@@ -85,9 +85,12 @@ export function Card({
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 14, filter: "blur(4px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
+      // Opacity and movement only: both run on the GPU. (A blur here repaints
+      // every card on every frame, which stutters on phones.) The stagger is
+      // capped so the whole page has arrived in about 0.4 s.
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: Math.min(delay, 0.12), ease: [0.16, 1, 0.3, 1] }}
       whileHover={hover ? { y: -3 } : undefined}
       onMouseMove={(e) => {
         if (!spotlight || !ref.current) return;
@@ -413,20 +416,20 @@ export function PageHeader({ title, subtitle, actions, eyebrow }: { title: React
         <h1 className="text-[26px] leading-tight font-bold tracking-tight text-fg sm:text-[30px]">
           {words
             ? words.map((w, i) => (
-                <motion.span key={i} className="mr-[0.25em] inline-block" initial={{ opacity: 0, y: 14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ delay: 0.04 * i, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
+                <motion.span key={i} className="mr-[0.25em] inline-block" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(0.025 * i, 0.1), duration: 0.3, ease: [0.16, 1, 0.3, 1] }}>
                   {w}
                 </motion.span>
               ))
             : title}
         </h1>
         {subtitle && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-1 text-sm text-muted">
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.06, duration: 0.25 }} className="mt-1 text-sm text-muted">
             {subtitle}
           </motion.p>
         )}
       </div>
       {actions && (
-        <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }} className="flex flex-wrap items-center gap-2">
+        <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05, duration: 0.25 }} className="flex flex-wrap items-center gap-2">
           {actions}
         </motion.div>
       )}
@@ -443,8 +446,8 @@ export function Stagger({ children, className, delay = 0.05 }: { children: React
 }
 
 export const staggerItem = {
-  hidden: { opacity: 0, y: 12, filter: "blur(4px)" },
-  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] } },
 };
 
 export function Popover({ open, onClose, children, className, align = "right" }: { open: boolean; onClose: () => void; children: ReactNode; className?: string; align?: "left" | "right" }) {

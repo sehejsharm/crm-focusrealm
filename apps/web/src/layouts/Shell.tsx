@@ -109,7 +109,7 @@ function Notifications() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const q = useQuery({ queryKey: ["notifications"], queryFn: () => api.get<{ notifications: Notification[]; unread: number }>("/notifications"), refetchInterval: 60_000 });
+  const q = useQuery({ queryKey: ["notifications"], queryFn: () => api.get<{ notifications: Notification[]; unread: number }>("/notifications"), refetchInterval: 5 * 60_000 });
   const read = useMutation({ mutationFn: () => api.post("/notifications/read"), onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }) });
   const unread = q.data?.unread ?? 0;
   return (
@@ -395,17 +395,16 @@ export function Shell() {
         </header>
 
         <main className="relative mx-auto w-full max-w-[1400px] px-4 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:px-8 lg:py-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -8, filter: "blur(4px)", transition: { duration: 0.15 } }}
-              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {outlet}
-            </motion.div>
-          </AnimatePresence>
+          {/* The next page shows at once with a short fade. Waiting for the old
+              page to fade out first made every click feel slower than it was. */}
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {outlet}
+          </motion.div>
         </main>
       </div>
 

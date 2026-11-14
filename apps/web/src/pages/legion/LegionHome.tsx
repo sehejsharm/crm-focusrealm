@@ -14,7 +14,7 @@ import { HandoffCard } from "./Handoffs";
 /** Legion HQ: the pipeline at a glance, the inbox, the week's meetings and the sales floor, live. */
 export default function LegionHome() {
   const { user } = useAuth();
-  const q = useQuery({ queryKey: ["dash", "legion"], queryFn: () => api.get<any>("/dashboard/legion"), refetchInterval: 20_000 });
+  const q = useQuery({ queryKey: ["dash", "legion"], queryFn: () => api.get<any>("/dashboard/legion"), refetchInterval: 60_000 });
   const d = q.data;
   const base = `/${user?.portal}`;
   const isLegion = user?.role === "legion";

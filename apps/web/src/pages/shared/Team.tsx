@@ -14,7 +14,7 @@ import { Grade } from "./Reports";
 export default function Team() {
   const { user } = useAuth();
   const [date, setDate] = useState(todayISO());
-  const q = useQuery({ queryKey: ["team", date], queryFn: () => api.get<any>(`/dashboard/team?date=${date}`), refetchInterval: 30_000 });
+  const q = useQuery({ queryKey: ["team", date], queryFn: () => api.get<any>(`/dashboard/team?date=${date}`), refetchInterval: 60_000 });
   const d = q.data;
   const base = `/${user?.portal}`;
   const online = (t: string | null) => Boolean(t && Date.now() - new Date(t).getTime() < 10 * 60_000);

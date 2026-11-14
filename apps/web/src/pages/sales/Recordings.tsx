@@ -18,7 +18,7 @@ interface Inbox {
  * recent uploads through transcription and AI analysis.
  */
 export default function Recordings() {
-  const q = useQuery({ queryKey: ["recordings"], queryFn: () => api.get<Inbox>("/calls/recordings"), refetchInterval: 15_000 });
+  const q = useQuery({ queryKey: ["recordings"], queryFn: () => api.get<Inbox>("/calls/recordings"), refetchInterval: 45_000 });
   const waiting = q.data?.waiting ?? [];
   const recent = q.data?.recent ?? [];
   return (
