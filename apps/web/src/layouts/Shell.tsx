@@ -268,7 +268,7 @@ function TabBar({ items, onMore, hidden }: { items: NavItem[]; onMore: () => voi
     <nav
       aria-label="Main"
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-16px_rgba(10,20,38,0.25)] backdrop-blur-xl transition-transform duration-200 lg:hidden",
+        "tabbar fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-16px_rgba(10,20,38,0.25)] backdrop-blur-xl transition-transform duration-200 lg:hidden",
         hidden && "translate-y-full",
       )}
     >

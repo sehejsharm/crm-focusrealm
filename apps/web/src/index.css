@@ -247,16 +247,16 @@ main code,
 /*
  * Android phones and tablets: a see-through, blurred bar has to re-blur
  * whatever scrolls beneath it on every frame, which is what makes scrolling
- * stutter on mid-range phones. There the bars are simply near-solid. iPhones
- * and iPads (the @supports test) handle the blur well and keep it.
+ * stutter on mid-range phones. There the bars are simply solid. iPhones and
+ * iPads (the @supports test) handle the blur well and keep it.
  */
 @media (pointer: coarse) {
   @supports not (-webkit-touch-callout: none) {
     :root {
-      --glass: rgba(255, 255, 255, 0.97);
+      --glass: #ffffff;
     }
     .dark {
-      --glass: rgba(12, 19, 32, 0.97);
+      --glass: #0c1320;
     }
     .glass,
     .backdrop-blur-sm,
@@ -266,6 +266,10 @@ main code,
     .backdrop-blur-xl {
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
+    }
+    /* With no blur behind it, the tab bar must not let text show through. */
+    .tabbar {
+      background-color: var(--surface);
     }
   }
 }

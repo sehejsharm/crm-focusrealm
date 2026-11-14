@@ -37,7 +37,7 @@ export default function PhoneLink() {
   const checkNow = useLiveCheck();
   const [dial, setDial] = useState<Dial | null>(null);
   const [stage, setStage] = useState<"ready" | "incoming" | "dialled" | "wrap">("ready");
-  // Waiting for a number: check every 2.5 s while the phone is in use, every
+  // Waiting for a number: check every 2 s while the phone is in use, every
   // 8 s once it has sat untouched for ten minutes. A tap always checks at once.
   const [warm, setWarm] = useState(true);
   const cool = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,7 +53,7 @@ export default function PhoneLink() {
       if (cool.current) clearTimeout(cool.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useFastLive("phone", stage === "ready", warm ? 2_500 : 8_000);
+  useFastLive("phone", stage === "ready", warm ? 2_000 : 8_000);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
