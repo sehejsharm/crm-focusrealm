@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
+import { GuideGate } from "./components/guide";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { BrandLoader } from "./components/brand";
 import { CallProvider } from "./components/call";
@@ -88,6 +89,7 @@ export default function App() {
                       </Route>
                       <Route path="*" element={<Home />} />
                     </Routes>
+                    <GuideGate />
                   </Suspense>
                 </CallProvider>
               </LiveProvider>

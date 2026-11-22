@@ -16,6 +16,8 @@ export interface User {
   source: string;
   daily_call_target: number;
   portal: Portal;
+  /** Onboarding guide: shown on each of the first `limit` sign-ins until "never show again". */
+  guide?: { show: boolean; signIn: number; limit: number; never: boolean };
 }
 
 export interface Meta {

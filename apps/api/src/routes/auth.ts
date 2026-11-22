@@ -19,8 +19,23 @@ export const authRouter = Router();
 // Simple in-memory brute-force guard: 8 failed attempts per login ID per 15 minutes.
 const failures = new Map<string, { n: number; until: number }>();
 
+/** The onboarding guide shows on each of the first GUIDE_LOGINS sign-ins, until "never show again". */
+export const GUIDE_LOGINS = 12;
+const GUIDE_ROLES = ["sales_rep", "sales_head", "legion"];
+
 function present(u: AuthUser) {
-  return { ...u, portal: portalOf(u.role), token_version: undefined };
+  const { token_version: _tv, login_count, guide_seen_at_login, guide_never, ...rest } = u;
+  const signIn = Math.max(1, login_count ?? 0);
+  return {
+    ...rest,
+    portal: portalOf(u.role),
+    guide: {
+      show: GUIDE_ROLES.includes(u.role) && !guide_never && signIn <= GUIDE_LOGINS && (guide_seen_at_login ?? 0) < signIn,
+      signIn,
+      limit: GUIDE_LOGINS,
+      never: Boolean(guide_never),
+    },
+  };
 }
 
 authRouter.post("/login", async (req, res) => {
@@ -42,7 +57,11 @@ authRouter.post("/login", async (req, res) => {
   }
   if (user.status !== "active") throw new HttpError(403, user.status === "offboarded" ? "This account has been offboarded" : "This account is inactive — talk to your sales head");
   failures.delete(key);
-  await db.query(`update crm_users set last_login_at = now(), last_active_at = now() where id = $1`, [user.id]);
+  const counted = await db.one<{ login_count: number }>(
+    `update crm_users set last_login_at = now(), last_active_at = now(), login_count = login_count + 1 where id = $1 returning login_count`,
+    [user.id],
+  );
+  user.login_count = counted.login_count;
   setSessionCookie(res, signSession(user));
   await audit({ id: user.id, label: user.full_name }, "auth.login", "user", user.id, { ip: req.ip });
   const { password_hash: _ph, ...safe } = user;
@@ -110,6 +129,19 @@ authRouter.post("/logout", async (req, res) => {
 authRouter.get("/me", async (req, res) => {
   if (!req.user) throw new HttpError(401, "Please sign in");
   res.json({ user: present(req.user) });
+});
+
+/** The person watched the onboarding guide to the end (optionally: never show it again). */
+authRouter.post("/guide", async (req, res) => {
+  if (!req.user) throw new HttpError(401, "Please sign in");
+  const body = parse(z.object({ neverAgain: z.boolean().optional() }), req.body);
+  const u = await db.one<AuthUser>(
+    `update crm_users set guide_seen_at_login = greatest(login_count, 1), guide_never = guide_never or $2
+     where id = $1 returning ${USER_COLUMNS}`,
+    [req.user.id, Boolean(body.neverAgain)],
+  );
+  await audit({ id: u.id, label: u.full_name }, body.neverAgain ? "guide.never" : "guide.watched", "user", u.id, { signIn: u.login_count });
+  res.json({ user: present(u) });
 });
 
 authRouter.post("/change-password", async (req, res) => {

@@ -1,7 +1,7 @@
 {
   "name": "Focus Realm CRM",
-  "short_name": "FR CRM",
-  "start_url": "/phone",
+  "short_name": "Focus Realm",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f7fb",
   "theme_color": "#1a6ae0",

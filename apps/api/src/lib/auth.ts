@@ -23,6 +23,9 @@ export interface AuthUser {
   avatar_hue: number;
   source: string;
   daily_call_target: number;
+  login_count: number;
+  guide_seen_at_login: number;
+  guide_never: boolean;
 }
 
 declare global {
@@ -38,7 +41,8 @@ export const COOKIE = "fr_crm";
 const SESSION_HOURS = 12;
 
 export const USER_COLUMNS = `id, employee_code, email, full_name, phone, role, title, department, status,
-  must_change_password, token_version, avatar_hue, source, daily_call_target`;
+  must_change_password, token_version, avatar_hue, source, daily_call_target,
+  login_count, guide_seen_at_login, guide_never`;
 
 export async function hashPassword(pw: string) {
   return bcrypt.hash(pw, 11);

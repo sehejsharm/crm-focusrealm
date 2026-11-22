@@ -24,6 +24,13 @@ motion everywhere.
 | **Legion** (`/legion`) | The Legion team | Legion HQ · **handoff inbox** (accept, or return with a reason) · Legion Meet 1 & 2 scheduling and outcomes · the pipeline · a live view of the **sales team's work** (leaderboard, activity feed, calls, daily reports). |
 | **Founders** (`/founder`) | CEO, COO, founders | **Command Center** (funnel, conversion, decision-maker reach, follow-up compliance, overdue work, objections, product feedback, system health) · everything the other portals have · **assign tasks** to anyone · people & access · settings (daily reports, calling mode, HR connection, allocation & morning top-up, qualification checklist, WhatsApp messages) · audit log. |
 
+**Onboarding guide** — sales team members and Legion get a short animated
+walkthrough on each of their first 12 sign-ins (it can't be skipped; "Don't
+show this again" on its last screen turns it off): adding the CRM to the
+home screen on iPhone/Android, which call recorder to use, uploading the
+recording, and their own daily workflow. Anyone can replay it from the
+profile menu → How to use the CRM.
+
 Plus **Phone Link** (`/phone`) — a mobile screen for each salesperson's phone
 (add it to the home screen). Pressing **Call** in the CRM sends the number to
 it: tap to dial, then attach the recording.

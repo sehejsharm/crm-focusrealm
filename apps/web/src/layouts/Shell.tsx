@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { openGuide } from "../components/guide";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell, BrainCircuit, CalendarCheck, ChartNoAxesCombined, ClipboardList, Contact, Crown, Database, FileText, Gauge, Handshake,
   KanbanSquare, LayoutDashboard, ListTodo, LogOut, Menu, Mic, Moon, PhoneCall, ScrollText, Search, Settings, Shield, Shuffle,
-  Smartphone, Sparkles, Sun, Swords, Target, Users, X, Zap,
-} from "lucide-react";
+  Smartphone, Sparkles, Sun, Swords, Target, Users, X, Zap, GraduationCap } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate, useOutlet } from "react-router-dom";
 import { BrandTile } from "../components/brand";
@@ -181,6 +181,7 @@ function UserMenu() {
         <div className="my-1 h-px bg-line" />
         <MenuItem icon={<Smartphone className="size-4" />} onClick={() => { setOpen(false); navigate("/phone"); }}>Open Phone Link</MenuItem>
         <MenuItem icon={<Settings className="size-4" />} onClick={() => { setOpen(false); navigate("/profile"); }}>My profile & phone</MenuItem>
+        <MenuItem icon={<GraduationCap className="size-4" />} onClick={() => { setOpen(false); openGuide(); }}>How to use the CRM</MenuItem>
         <MenuItem icon={<LogOut className="size-4" />} onClick={async () => { await logout(); navigate("/login"); }}>Sign out</MenuItem>
       </Popover>
     </div>
