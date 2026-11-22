@@ -7,7 +7,7 @@ import { badRequest, forbidden, notFound, parse, zId, zIsoDate, zPage } from "..
 import { phoneKey } from "../lib/phone.js";
 import { activity, audit } from "../lib/record.js";
 import { todayLocal } from "../lib/time.js";
-import { inactivityFlags, previewAllocation, reassignContact, runAllocation } from "../services/allocation.js";
+import { countPool, inactivityFlags, poolFacets, previewAllocation, reassignContact, runAllocation } from "../services/allocation.js";
 import {
   attachRecording, recordingsInbox, callDetail, completeRecordingUpload, listCalls, logOutcome, OUTCOMES, recordingPlaybackUrl, recordingUploadTarget,
   reviewCall, startCall, streamRecording, updateCallStatus,
@@ -306,13 +306,34 @@ api.post("/contacts/:id/close", async (req, res) => {
 
 // -------------------------------------------------------------- allocation
 
-const AllocationBody = z.object({
-  campaign: z.string().optional().nullable(),
-  segment: z.string().optional().nullable(),
-  source: z.string().optional().nullable(),
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable();
+const PoolFilterBody = z.object({
+  campaign: z.string().max(200).optional().nullable(),
+  segment: z.string().max(200).optional().nullable(),
+  source: z.string().max(200).optional().nullable(),
+  cities: z.array(z.string().max(200)).max(300).optional(),
+  industries: z.array(z.string().max(200)).max(200).optional(),
+  sources: z.array(z.string().max(200)).max(100).optional(),
+  importBatchIds: z.array(zId).max(50).optional(),
+  designation: z.string().max(500).optional().nullable(),
+  excludeDesignation: z.string().max(500).optional().nullable(),
+  company: z.string().max(500).optional().nullable(),
+  hasEmail: z.boolean().optional(),
+  neverCalled: z.boolean().optional(),
+  addedFrom: day,
+  addedTo: day,
+});
+
+const AllocationBody = PoolFilterBody.extend({
   userIds: z.array(zId).min(1).max(200),
   batchSize: z.number().int().min(1).max(100).optional(),
   maxActive: z.number().int().min(1).max(2000).optional(),
+});
+
+api.get("/allocation/facets", manager, async (_req, res) => res.json(await poolFacets()));
+
+api.post("/allocation/count", manager, async (req, res) => {
+  res.json({ matching: await countPool(parse(PoolFilterBody, req.body)) });
 });
 
 api.post("/allocation/preview", manager, async (req, res) => {

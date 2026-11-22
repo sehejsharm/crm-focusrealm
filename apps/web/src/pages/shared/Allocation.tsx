@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Check, Database, History, Repeat, Shuffle, Sparkles, UserCheck, Users, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertTriangle, Briefcase, Building2, Check, ChevronDown, Database, Filter, History, MapPin, Repeat, Search, Shuffle, SlidersHorizontal, Sparkles, UserCheck, Users, X, Zap } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { celebrate, Counter } from "../../components/motion";
 import { useToast } from "../../components/toast";
-import { Avatar, Badge, Button, Card, CardHeader, Empty, Field, PageHeader, Select, Skeleton, Tabs } from "../../components/ui";
+import { Avatar, Badge, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Skeleton, Switch, Tabs } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, cn, fmtDateTime } from "../../lib/format";
@@ -47,12 +47,13 @@ export default function Allocation() {
 function Allocate() {
   const qc = useQueryClient();
   const toast = useToast();
-  const facets = useQuery({ queryKey: ["facets"], queryFn: () => api.get<any>("/contacts/facets") });
+  const facets = useQuery({ queryKey: ["allocation-facets"], queryFn: () => api.get<PoolFacets>("/allocation/facets") });
   const people = useQuery({ queryKey: ["users"], queryFn: () => api.get<{ users: any[] }>("/users") });
   const settings = useQuery({ queryKey: ["settings"], queryFn: () => api.get<{ settings: any }>("/settings") });
   const reps = (people.data?.users ?? []).filter((u) => u.status === "active" && ["sales_rep", "sales_head"].includes(u.role));
-  const [campaign, setCampaign] = useState("");
-  const [segment, setSegment] = useState("");
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setFilters((f) => ({ ...f, [k]: v }));
+  const [more, setMore] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [batchSize, setBatchSize] = useState(10);
   const [maxActive, setMaxActive] = useState(60);
@@ -69,7 +70,16 @@ function Allocate() {
     if (reps.length && !selected.length) setSelected(reps.filter((r) => r.role === "sales_rep").map((r) => r.id));
   }, [reps.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const body = { campaign: campaign || null, segment: segment || null, userIds: selected, batchSize, maxActive };
+  const filterBody = useMemo(() => toBody(filters), [filters]);
+  const activeFilters = Object.keys(filterBody).length;
+  const body = { ...filterBody, userIds: selected, batchSize, maxActive };
+  // Live count of matching prospects while filters change (debounced).
+  const [debounced, setDebounced] = useState(filterBody);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(filterBody), 350);
+    return () => clearTimeout(t);
+  }, [filterBody]);
+  const matching = useQuery({ queryKey: ["allocation-count", debounced], queryFn: () => api.post<{ matching: number }>("/allocation/count", debounced), placeholderData: (p) => p });
   const doPreview = useMutation({ mutationFn: () => api.post<Preview>("/allocation/preview", body), onSuccess: (p) => { setPreview(p); setResult(null); }, onError: (e) => toast({ kind: "error", title: "Can't preview", body: (e as Error).message }) });
   const run = useMutation({
     mutationFn: () => api.post<any>("/allocation/run", body),
@@ -82,17 +92,82 @@ function Allocate() {
     onError: (e) => toast({ kind: "error", title: "Allocation failed", body: (e as Error).message }),
   });
 
-  useEffect(() => setPreview(null), [campaign, segment, selected.join(","), batchSize, maxActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPreview(null), [JSON.stringify(filterBody), selected.join(","), batchSize, maxActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]">
-      <Card>
-        <CardHeader title="1 · Choose the pool" subtitle="Only open, unowned, callable prospects are eligible" icon={<Users className="size-4" />} />
+      <Card className="relative z-10">
+        <CardHeader
+          title="1 · Choose the pool"
+          subtitle="Only open, unowned, callable prospects are eligible"
+          icon={<Users className="size-4" />}
+          action={
+            <motion.span key={matching.data?.matching ?? -1} initial={{ scale: 0.85, opacity: 0.4 }} animate={{ scale: 1, opacity: 1 }} className="whitespace-nowrap rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-soft-fg tabular-nums">
+              {matching.data ? `${matching.data.matching.toLocaleString("en-IN")} match` : "…"}
+            </motion.span>
+          }
+        />
         <div className="space-y-4 px-5 pb-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Campaign"><Select value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">Any campaign</option>{(facets.data?.campaigns ?? []).filter((c: any) => c.value).map((c: any) => <option key={c.value} value={c.value}>{c.value}</option>)}</Select></Field>
-            <Field label="Segment"><Select value={segment} onChange={(e) => setSegment(e.target.value)}><option value="">Any segment</option>{(facets.data?.segments ?? []).filter((c: any) => c.value).map((c: any) => <option key={c.value} value={c.value}>{c.value}</option>)}</Select></Field>
+            <MultiPick label="Location" icon={<MapPin className="size-4" />} placeholder="Any city" options={facets.data?.cities} value={filters.cities} onChange={(v) => set("cities", v)} />
+            <MultiPick label="Industry" icon={<Building2 className="size-4" />} placeholder="Any industry" options={facets.data?.industries} value={filters.industries} onChange={(v) => set("industries", v)} />
           </div>
+          <div>
+            <Field label="Designation" hint="Any of these words, separated by commas">
+              <Input icon={<Briefcase className="size-4" />} value={filters.designation} onChange={(e) => set("designation", e.target.value)} placeholder="e.g. owner, CEO, general manager" />
+            </Field>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {SENIORITY.map((w) => {
+                const on = splitWords(filters.designation).includes(w.toLowerCase());
+                return (
+                  <motion.button key={w} type="button" whileTap={{ scale: 0.94 }} onClick={() => set("designation", toggleWord(filters.designation, w))}
+                    className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold transition", on ? "border-brand-500 bg-accent-soft text-accent-soft-fg" : "border-line text-muted hover:border-line-strong hover:text-fg")}>
+                    {on && <Check className="mr-1 inline size-3" />}{w}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+          <Field label="Hotel / company name" hint="Contains any of these, separated by commas">
+            <Input icon={<Search className="size-4" />} value={filters.company} onChange={(e) => set("company", e.target.value)} placeholder="e.g. Taj, Marriott, Radisson" />
+          </Field>
+
+          <div className="rounded-2xl border border-line">
+            <button type="button" onClick={() => setMore((m) => !m)} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] font-semibold text-fg">
+              <SlidersHorizontal className="size-4 text-accent" /> More filters
+              <span className="text-xs font-normal text-muted">campaign, segment, source, import file, date added…</span>
+              <ChevronDown className={cn("ml-auto size-4 text-muted transition", more && "rotate-180")} />
+            </button>
+            <AnimatePresence initial={false}>
+              {more && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <div className="space-y-3 border-t border-line p-3.5">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Campaign"><Select value={filters.campaign} onChange={(e) => set("campaign", e.target.value)}><option value="">Any campaign</option>{(facets.data?.campaigns ?? []).map((c) => <option key={c.value} value={c.value}>{c.value} ({c.count})</option>)}</Select></Field>
+                      <Field label="Segment"><Select value={filters.segment} onChange={(e) => set("segment", e.target.value)}><option value="">Any segment</option>{(facets.data?.segments ?? []).map((c) => <option key={c.value} value={c.value}>{c.value} ({c.count})</option>)}</Select></Field>
+                      <MultiPick label="Source" placeholder="Any source" options={facets.data?.sources} value={filters.sources} onChange={(v) => set("sources", v)} />
+                      <MultiPick label="Import file" placeholder="Any import" options={facets.data?.batches.map((b) => ({ value: b.value, label: `${b.label} · ${fmtDateTime(b.created_at)}`, count: b.count }))} value={filters.importBatchIds} onChange={(v) => set("importBatchIds", v)} />
+                      <Field label="Added from"><Input type="date" value={filters.addedFrom} onChange={(e) => set("addedFrom", e.target.value)} /></Field>
+                      <Field label="Added until"><Input type="date" value={filters.addedTo} onChange={(e) => set("addedTo", e.target.value)} /></Field>
+                    </div>
+                    <Field label="Leave out designations containing" hint="e.g. intern, assistant, trainee">
+                      <Input value={filters.excludeDesignation} onChange={(e) => set("excludeDesignation", e.target.value)} placeholder="intern, assistant" />
+                    </Field>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <ToggleRow label="Only with an email" checked={filters.hasEmail} onChange={(v) => set("hasEmail", v)} />
+                      <ToggleRow label="Only never called" checked={filters.neverCalled} onChange={(v) => set("neverCalled", v)} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          {activeFilters > 0 && (
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <Filter className="size-3.5 text-accent" /> {activeFilters} filter{activeFilters === 1 ? "" : "s"} on
+              <button type="button" onClick={() => setFilters(NO_FILTERS)} className="font-semibold text-accent hover:underline">Clear all</button>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Slider label="Batch size per person" value={batchSize} min={1} max={30} onChange={setBatchSize} hint="Proposal default: 5–10" />
             <Slider label="Max active prospects" value={maxActive} min={10} max={300} step={5} onChange={setMaxActive} hint="Nobody goes over this" />
@@ -188,6 +263,142 @@ function Allocate() {
   );
 }
 
+type Opt = { value: string; label?: string; count: number };
+interface PoolFacets {
+  cities: Opt[];
+  industries: Opt[];
+  sources: Opt[];
+  campaigns: Opt[];
+  segments: Opt[];
+  batches: { value: string; label: string; created_at: string; count: number }[];
+  designations: Opt[];
+}
+interface Filters {
+  campaign: string;
+  segment: string;
+  cities: string[];
+  industries: string[];
+  sources: string[];
+  importBatchIds: string[];
+  designation: string;
+  excludeDesignation: string;
+  company: string;
+  hasEmail: boolean;
+  neverCalled: boolean;
+  addedFrom: string;
+  addedTo: string;
+}
+const NO_FILTERS: Filters = {
+  campaign: "", segment: "", cities: [], industries: [], sources: [], importBatchIds: [],
+  designation: "", excludeDesignation: "", company: "", hasEmail: false, neverCalled: false, addedFrom: "", addedTo: "",
+};
+/** Only the filters that are actually set. */
+function toBody(f: Filters) {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(f)) {
+    if (Array.isArray(v) ? v.length : typeof v === "string" ? v.trim() : v) out[k] = typeof v === "string" ? v.trim() : v;
+  }
+  return out;
+}
+const SENIORITY = ["Owner", "Founder", "CEO", "MD", "Director", "General Manager", "VP", "Head", "Manager", "Partner"];
+const splitWords = (s: string) => s.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+function toggleWord(s: string, w: string) {
+  const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
+  const i = parts.findIndex((x) => x.toLowerCase() === w.toLowerCase());
+  if (i >= 0) parts.splice(i, 1);
+  else parts.push(w);
+  return parts.join(", ");
+}
+function describeFilters(s: any): string[] {
+  if (!s) return [];
+  const out: string[] = [];
+  if (s.campaign) out.push(s.campaign);
+  if (s.segment) out.push(s.segment);
+  if (s.cities?.length) out.push(s.cities.slice(0, 3).join(", ") + (s.cities.length > 3 ? ` +${s.cities.length - 3}` : ""));
+  if (s.industries?.length) out.push(s.industries.join(", "));
+  if (s.designation) out.push(`“${s.designation}”`);
+  if (s.company) out.push(`company: ${s.company}`);
+  if (s.neverCalled) out.push("never called");
+  return out;
+}
+
+function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-sunken/70 px-3 py-2 text-sm text-fg">
+      {label}
+      <Switch checked={checked} onChange={onChange} label={label} />
+    </div>
+  );
+}
+
+/** A searchable multi-select with counts, for long lists like cities. */
+function MultiPick({ label, icon, placeholder, options, value, onChange }: { label: string; icon?: ReactNode; placeholder: string; options?: Opt[]; value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  // On phones, don't pop the keyboard over the list the moment it opens.
+  const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  useEffect(() => {
+    if (!open) return;
+    const fn = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", fn);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", fn);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const list = (options ?? []).filter((o) => (o.label ?? o.value).toLowerCase().includes(q.trim().toLowerCase()));
+  const nameOf = (v: string) => options?.find((o) => o.value === v)?.label ?? v;
+  const summary = value.length === 0 ? placeholder : value.length <= 2 ? value.map(nameOf).join(", ") : `${nameOf(value[0])} +${value.length - 1} more`;
+  return (
+    <div ref={ref} className="relative">
+      <span className="mb-1.5 block text-[13px] font-semibold text-fg">{label}</span>
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        className={cn("flex h-10 w-full items-center gap-2 rounded-xl border bg-surface px-3 text-left text-sm shadow-xs transition", open ? "border-brand-500 ring-focus" : "border-line-strong", value.length ? "text-fg" : "text-subtle")}>
+        {icon && <span className="text-subtle">{icon}</span>}
+        <span className="min-w-0 flex-1 truncate">{summary}</span>
+        {value.length > 0 && (
+          <span role="button" tabIndex={-1} aria-label={`Clear ${label}`} onClick={(e) => { e.stopPropagation(); onChange([]); }} className="grid size-5 place-items-center rounded-full text-muted hover:bg-sunken hover:text-fg">
+            <X className="size-3.5" />
+          </span>
+        )}
+        <ChevronDown className={cn("size-4 text-muted transition", open && "rotate-180")} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, transition: { duration: 0.1 } }}
+            className="absolute top-full right-0 left-0 z-50 mt-1.5 min-w-60 origin-top rounded-2xl border border-line bg-surface p-2 shadow-lg">
+            <Input autoFocus={!coarse} icon={<Search className="size-4" />} value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${label.toLowerCase()}…`} className="h-9" />
+            <div className="mt-1.5 max-h-64 overflow-y-auto">
+              {!options && <p className="p-3 text-center text-xs text-muted">Loading…</p>}
+              {options && list.length === 0 && <p className="p-3 text-center text-xs text-muted">{options.length ? "No match" : "Nothing in the pool has this yet"}</p>}
+              {list.map((o) => {
+                const on = value.includes(o.value);
+                return (
+                  <button key={o.value} type="button" onClick={() => onChange(on ? value.filter((v) => v !== o.value) : [...value, o.value])}
+                    className={cn("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-surface-hover", on && "bg-accent-soft/60")}>
+                    <span className={cn("grid size-4 shrink-0 place-items-center rounded border transition", on ? "border-brand-600 bg-brand-600 text-white" : "border-line-strong")}>{on && <Check className="size-3" />}</span>
+                    <span className="min-w-0 flex-1 truncate text-fg">{o.label ?? o.value}</span>
+                    <span className="text-xs text-muted tabular-nums">{o.count.toLocaleString("en-IN")}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {value.length > 0 && (
+              <div className="mt-1.5 flex items-center justify-between border-t border-line px-1 pt-1.5 text-xs">
+                <span className="text-muted">{value.length} selected</span>
+                <button type="button" onClick={() => onChange([])} className="font-semibold text-accent hover:underline">Clear</button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function Slider({ label, value, min, max, step = 1, onChange, hint }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; hint?: string }) {
   return (
     <div>
@@ -218,7 +429,7 @@ function BatchHistory() {
           <span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-accent-soft-fg"><Shuffle className="size-4" /></span>
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-fg">{b.assigned_count} prospects · {b.initiated_by ? `by ${b.initiated_by_name ?? "—"}` : "morning top-up"}</p>
-            <p className="text-xs text-muted">{fmtDateTime(b.created_at)} · batch {b.settings?.batchSize} · max {b.settings?.maxActive}{b.settings?.campaign ? ` · ${b.settings.campaign}` : ""}{b.settings?.segment ? ` · ${b.settings.segment}` : ""}</p>
+            <p className="text-xs text-muted">{fmtDateTime(b.created_at)} · batch {b.settings?.batchSize} · max {b.settings?.maxActive}{describeFilters(b.settings).map((d) => ` · ${d}`).join("")}</p>
           </div>
           <Badge tone="neutral">{Object.keys(b.summary?.perUser ?? {}).length} people</Badge>
         </motion.div>

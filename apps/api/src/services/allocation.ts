@@ -96,10 +96,30 @@ export function planAllocation(input: PlanInput): Plan {
   return { assignments, perUser, unassigned };
 }
 
-export interface AllocationRequest {
+/** Narrow the pool before splitting it. Every filter is optional. */
+export interface PoolFilters {
   campaign?: string | null;
   segment?: string | null;
   source?: string | null;
+  /** City of the prospect, or of their company when the prospect has none. Any of. */
+  cities?: string[];
+  /** Company industry. Any of. */
+  industries?: string[];
+  sources?: string[];
+  importBatchIds?: string[];
+  /** Comma-separated words; a prospect matches if their designation contains any. */
+  designation?: string | null;
+  /** Words that must NOT appear in the designation, e.g. "intern, assistant". */
+  excludeDesignation?: string | null;
+  /** Comma-separated words matched against the company (hotel) name. */
+  company?: string | null;
+  hasEmail?: boolean;
+  neverCalled?: boolean;
+  addedFrom?: string | null;
+  addedTo?: string | null;
+}
+
+export interface AllocationRequest extends PoolFilters {
   userIds: string[];
   batchSize?: number;
   maxActive?: number;
@@ -108,35 +128,93 @@ export interface AllocationRequest {
 /** Active = owned and still being worked (not closed, disqualified or with Legion). */
 const ACTIVE_STATUSES = `('new','outreach','follow_up','qualification_review','qualified','returned')`;
 
-async function eligiblePool(req: AllocationRequest) {
-  const where = [
-    "c.owner_id is null",
-    "c.do_not_contact = false",
-    "c.is_invalid = false",
-    "c.stage = 'prospect'",
-    `c.status in ('new','returned')`,
-    "c.phone_key is not null",
-  ];
+/** Open, unowned and callable: the only prospects allocation may hand out. */
+const OPEN_POOL = [
+  "c.owner_id is null",
+  "c.do_not_contact = false",
+  "c.is_invalid = false",
+  "c.stage = 'prospect'",
+  `c.status in ('new','returned')`,
+  "c.phone_key is not null",
+];
+const POOL_FROM = "crm_contacts c left join crm_companies co on co.id = c.company_id";
+/** Location as shown in filters: the prospect's own city, else their company's. */
+const CITY_SQL = "coalesce(nullif(trim(c.city), ''), nullif(trim(co.city), ''))";
+
+const words = (s?: string | null) =>
+  (s ?? "")
+    .split(/[,;\n]/)
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 30);
+const likeAny = (w: string[]) => w.map((x) => `%${x.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+
+/** SQL conditions (c = contact, co = company) for the chosen filters; values go into params. */
+export function filterSql(f: PoolFilters, params: unknown[]) {
+  const where: string[] = [];
+  const add = (sql: (n: string) => string, v: unknown) => {
+    params.push(v);
+    where.push(sql(`$${params.length}`));
+  };
+  if (f.campaign) add((n) => `c.campaign = ${n}`, f.campaign);
+  if (f.segment) add((n) => `c.segment = ${n}`, f.segment);
+  if (f.source) add((n) => `c.source = ${n}`, f.source);
+  if (f.cities?.length) add((n) => `lower(${CITY_SQL}) = any(${n}::text[])`, f.cities.map((c) => c.trim().toLowerCase()));
+  if (f.industries?.length) add((n) => `lower(trim(co.industry)) = any(${n}::text[])`, f.industries.map((c) => c.trim().toLowerCase()));
+  if (f.sources?.length) add((n) => `c.source = any(${n}::text[])`, f.sources);
+  if (f.importBatchIds?.length) add((n) => `c.import_batch_id = any(${n}::uuid[])`, f.importBatchIds);
+  const d = words(f.designation);
+  if (d.length) add((n) => `c.designation ilike any(${n}::text[])`, likeAny(d));
+  const x = words(f.excludeDesignation);
+  if (x.length) add((n) => `not (coalesce(c.designation, '') ilike any(${n}::text[]))`, likeAny(x));
+  const co = words(f.company);
+  if (co.length) add((n) => `co.name ilike any(${n}::text[])`, likeAny(co));
+  if (f.hasEmail) where.push("c.email_key is not null");
+  if (f.neverCalled) where.push("c.call_count = 0");
+  if (f.addedFrom) add((n) => `c.created_at >= ${n}::date`, f.addedFrom);
+  if (f.addedTo) add((n) => `c.created_at < (${n}::date + 1)`, f.addedTo);
+  return where;
+}
+
+/** How many open prospects match the filters (the live count while choosing). */
+export async function countPool(f: PoolFilters) {
   const params: unknown[] = [];
-  if (req.campaign) {
-    params.push(req.campaign);
-    where.push(`c.campaign = $${params.length}`);
-  }
-  if (req.segment) {
-    params.push(req.segment);
-    where.push(`c.segment = $${params.length}`);
-  }
-  if (req.source) {
-    params.push(req.source);
-    where.push(`c.source = $${params.length}`);
-  }
+  const where = [...OPEN_POOL, ...filterSql(f, params)];
+  const r = await db.one<{ n: number }>(`select count(*)::int as n from ${POOL_FROM} where ${where.join(" and ")}`, params);
+  return r.n;
+}
+
+/** The values each filter can take, counted over the open pool. */
+export async function poolFacets() {
+  const open = OPEN_POOL.join(" and ");
+  const base = `from ${POOL_FROM} where ${open}`;
+  const [cities, industries, sources, campaigns, segments, batches, designations] = await Promise.all([
+    db.many(`select min(${CITY_SQL}) as value, count(*)::int as count ${base} and ${CITY_SQL} is not null group by lower(${CITY_SQL}) order by count desc limit 300`),
+    db.many(`select min(trim(co.industry)) as value, count(*)::int as count ${base} and nullif(trim(co.industry), '') is not null group by lower(trim(co.industry)) order by count desc limit 200`),
+    db.many(`select c.source as value, count(*)::int as count ${base} and c.source is not null group by c.source order by count desc limit 100`),
+    db.many(`select c.campaign as value, count(*)::int as count ${base} and c.campaign is not null group by c.campaign order by count desc limit 100`),
+    db.many(`select c.segment as value, count(*)::int as count ${base} and c.segment is not null group by c.segment order by count desc limit 100`),
+    db.many(
+      `select b.id as value, coalesce(b.file_name, 'Import') as label, b.created_at, count(c.id)::int as count
+       from crm_import_batches b join ${POOL_FROM} on c.import_batch_id = b.id
+       where ${open} group by b.id order by b.created_at desc limit 50`,
+    ),
+    db.many(`select min(trim(c.designation)) as value, count(*)::int as count ${base} and nullif(trim(c.designation), '') is not null group by lower(trim(c.designation)) order by count desc limit 40`),
+  ]);
+  return { cities, industries, sources, campaigns, segments, batches, designations };
+}
+
+async function eligiblePool(req: AllocationRequest) {
+  const params: unknown[] = [];
+  const filters = filterSql(req, params);
+  const where = [...OPEN_POOL, ...filters];
   const pool = await db.many<{ id: string; segment: string | null }>(
-    `select c.id, c.segment from crm_contacts c where ${where.join(" and ")} order by c.created_at limit 5000`,
+    `select c.id, c.segment from ${POOL_FROM} where ${where.join(" and ")} order by c.created_at limit 5000`,
     params,
   );
 
-  // Why the rest of the segment was left out — shown to the manager.
-  const scope = params.length ? where.slice(6).join(" and ") : "true";
+  // Why the rest of the matching prospects were left out — shown to the manager.
+  const scope = filters.length ? filters.join(" and ") : "true";
   const excluded = await db.one(
     `select
        count(*) filter (where c.do_not_contact) as do_not_contact,
@@ -145,7 +223,7 @@ async function eligiblePool(req: AllocationRequest) {
        count(*) filter (where c.owner_id is not null and not c.do_not_contact and not c.is_invalid) as already_owned,
        count(*) filter (where c.owner_id is null and (c.stage <> 'prospect' or c.status not in ('new','returned'))
                          and not c.do_not_contact and not c.is_invalid) as not_open
-     from crm_contacts c where ${scope}`,
+     from ${POOL_FROM} where ${scope}`,
     params,
   );
   return { pool, excluded };
